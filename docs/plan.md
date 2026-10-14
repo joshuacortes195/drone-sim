@@ -77,12 +77,12 @@ Each phase is one session, ends with tests passing, a commit, a reviewer pass, a
 
 Scope questions, this plan, the rules file outside the repo, a CMake + doctest skeleton.
 
-### Phase 1: flight physics (tdd)
+### Phase 1: flight physics (tdd, done 2026-10-14)
 
 Concepts to learn first: rigid body dynamics, quaternions, thrust and torque from four motors.
 
-- `core/vecmath.h`: small vec3, quaternion and 3x3 helpers, only what the physics uses
-- `core/quad.{h,cpp}`: parameters, state (position, velocity, quaternion, body rates, rotor speeds), motor mixer, derivatives, `step(dt)`
+- `core/vecmath.h`: small vec3 and quaternion helpers, only what the physics uses (the diagonal inertia meant no 3x3 matrix was needed)
+- `core/quad.{h,cpp}`: parameters, state (position, velocity, quaternion, body rates, rotor speeds), `wrench()` (the forward mixer: rotor speeds to body force and torque, plus rotor drag), derivatives, `step(dt)`
 - tests:
   - equal rotor speeds whose thrust matches the weight hold a hover (no drift, no rotation over 10 s). The arms are uneven but symmetric left to right and front to back in x, so equal thrusts give zero torque
   - spinning the clockwise pair (front left, back right) faster and the counterclockwise pair slower, with the same total ω², gives a positive yaw torque (nose turns left) of 4 × 0.016 × ΔT. Because the front arms are 0.22 m out and the back ones 0.20 m, it also gives a roll torque of 0.04 × ΔT, so the test checks that exact value instead of zero, and checks the yaw rate is positive after a short time

@@ -30,8 +30,10 @@ Motors off, starting body rate ω = (1, 2, 3) rad/s (not about a principal axis,
 | RK4 | 2.1e-12 | 1.0e-12 |
 | semi-implicit Euler (rates first, then position and quaternion with the new rates) | 8.8e-2 (8.8%) | 3.9e-1 (39%) |
 
-Decision: RK4. Euler loses more than a third of the spin energy in a minute. RK4 holds it to rounding error.
+The Euler energy error goes up, not down: after 60 s it ends at 1.388 times the starting energy. Euler's equation for ω doesn't depend on the quaternion, so the ω update in the "semi-implicit" version is really plain explicit Euler, and explicit Euler on a rotation that should keep its energy adds a little every step. Only the position and quaternion updates use the new rates.
+
+Decision: RK4. Euler gains more than a third extra spin energy in a minute. RK4 holds it to rounding error.
 
 ## Cost of one step
 
-One RK4 step at hover (4 derivative evaluations plus renormalizing), averaged over 1,000,000 steps: 313 to 394 ns across three runs on the machine above. One second of flight at 1 ms steps is 1000 steps, so well under a millisecond of CPU per simulated second natively. The browser number gets measured separately in phase 3.
+One RK4 step at hover (4 derivative evaluations plus renormalizing), averaged over 1,000,000 steps: 308 to 394 ns across four runs on the machine above. One second of flight at 1 ms steps is 1000 steps, so well under a millisecond of CPU per simulated second natively. The browser number gets measured separately in phase 3.

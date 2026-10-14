@@ -3,6 +3,9 @@
 
 #include <cmath>
 
+// pi without relying on kPi, which msvc doesn't have by default
+constexpr double kPi = 3.14159265358979323846;
+
 // rotor order follows rotors' iris: 0 front right, 1 back left, 2 front left, 3 back right
 static const QuadParams P;
 
@@ -64,9 +67,9 @@ TEST_CASE("clockwise pair up and counterclockwise pair down yaws left, plus the 
   CHECK(f.torque.x == doctest::Approx(0.02));   // 0.04 * 0.5 from 0.22 vs 0.20 arms
   CHECK(std::abs(f.torque.y) < 1e-12);
   CHECK(f.force.z == doctest::Approx(P.mass * 9.81));
-  // holding it for a moment actually turns the nose left
+  // holding it for 0.1 s turns the nose left at about 0.032 / Izz * 0.1 = 0.0328 rad/s
   QuadState later = fly(s, s.rotor, 0.1);
-  CHECK(later.w.z > 0);
+  CHECK(later.w.z == doctest::Approx(0.0328).epsilon(0.05));
 }
 
 TEST_CASE("motors off from rest it falls as z0 - g t^2 / 2") {
@@ -79,7 +82,7 @@ TEST_CASE("motors off from rest it falls as z0 - g t^2 / 2") {
 TEST_CASE("pitched 10 degrees nose down at hover thrust it speeds up toward +x at g sin 10") {
   double w = hover_speed();
   QuadState s = at_rest(w);
-  s.q = axis_angle({0, 1, 0}, 10 * M_PI / 180);
+  s.q = axis_angle({0, 1, 0}, 10 * kPi / 180);
   CHECK(rotate(s.q, {1, 0, 0}).z < 0);  // positive pitch really is nose down
   QuadState later = fly(s, s.rotor, 0.01);
   CHECK(later.v.x / 0.01 == doctest::Approx(1.70349).epsilon(1e-3));
@@ -87,7 +90,7 @@ TEST_CASE("pitched 10 degrees nose down at hover thrust it speeds up toward +x a
 
 TEST_CASE("yawed 90 degrees, a body roll rate turns the drone about world y") {
   QuadState s = at_rest();
-  s.q = axis_angle({0, 0, 1}, M_PI / 2);  // nose points along world +y
+  s.q = axis_angle({0, 0, 1}, kPi / 2);  // nose points along world +y
   s.w = {1, 0, 0};
   QuadState later = fly(s, {0, 0, 0, 0}, 0.1);
   // the top of the drone tips toward world +x by 0.1 rad
@@ -113,9 +116,10 @@ TEST_CASE("torque free tumble off the main axes keeps world momentum and energy 
   CHECK(norm(later.w - s.w) > 0.1);
 }
 
-TEST_CASE("quaternion stays unit length over a long tumble") {
+TEST_CASE("quaternion stays unit length over a long fast tumble") {
+  // fast enough that rk4 alone would drift off unit length, so this needs the renormalize
   QuadState s = at_rest();
-  s.w = {1, 2, 3};
+  s.w = {20, 40, 60};
   for (int i = 0; i < 60000; i++) {
     s = step(P, s, {0, 0, 0, 0}, 0.001);
     double n = std::sqrt(s.q.w * s.q.w + s.q.x * s.q.x + s.q.y * s.q.y + s.q.z * s.q.z);
@@ -132,9 +136,11 @@ TEST_CASE("motors chase their command with a 12.5 ms lag speeding up and 25 ms s
   CHECK(down.rotor[3] == doctest::Approx(356.712).epsilon(1e-5));
 }
 
-TEST_CASE("rotor commands above the max speed get capped at 838 rad/s") {
+TEST_CASE("rotor commands get capped at 838 rad/s and can't go below zero") {
   QuadState s = fly(at_rest(), {2000, 2000, 2000, 2000}, 0.5);
   CHECK(s.rotor[1] == doctest::Approx(838).epsilon(1e-6));
+  QuadState r = fly(at_rest(), {-100, -100, -100, -100}, 0.5);
+  CHECK(r.rotor[0] == 0.0);
 }
 
 TEST_CASE("flying level at 5 m/s, rotor drag slows it and tips the nose up") {

@@ -9,7 +9,8 @@
 static const QuadParams P;
 static const Rotors OFF = {0, 0, 0, 0};
 
-// semi implicit euler for comparison: update the rates first, then move with the new rates
+// semi implicit euler for comparison: update the rates first, then move with the new rates.
+// the spin rate update itself is plain explicit euler, since euler's equation doesn't depend on q
 static QuadState euler_step(const QuadState& s, double dt) {
   QuadState d = derivative(P, s, OFF);
   QuadState n = s;
@@ -35,7 +36,8 @@ static void tumble(const char* name, bool rk4) {
     worst_L = std::fmax(worst_L, norm(momentum(s) - L0) / norm(L0));
     worst_E = std::fmax(worst_E, std::abs(energy(s) - E0) / E0);
   }
-  std::printf("%-22s worst momentum drift %.3e   worst energy drift %.3e\n", name, worst_L, worst_E);
+  std::printf("%-22s worst momentum drift %.3e   worst energy drift %.3e   final energy / start %.6f\n", name,
+              worst_L, worst_E, energy(s) / E0);
 }
 
 int main() {

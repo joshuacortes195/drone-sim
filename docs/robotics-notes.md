@@ -37,7 +37,7 @@ The state is 17 numbers: position (3), velocity (3), orientation quaternion (4),
 
 To move the state forward one step I use RK4. It samples the derivatives four times across the step and blends them, so it stays accurate when things are spinning fast. The step is a fixed 1 ms.
 
-I didn't just assume RK4 was needed, I measured it. I tumbled the drone from ω = (1, 2, 3) rad/s with the motors off for 60 s. With no torque, the angular momentum seen from the world and the spin energy should never change. RK4 held both to about 1e-12. Semi-implicit Euler lost 39% of the energy and 8.8% of the momentum. Full numbers are in `results/physics.md`. One RK4 step costs about 0.3 to 0.4 microseconds natively, so speed isn't a reason to drop it.
+I measured whether RK4 was worth it. I tumbled the drone from ω = (1, 2, 3) rad/s with the motors off for 60 s. With no torque, the angular momentum seen from the world and the spin energy should never change. RK4 held both to about 1e-12. Semi-implicit Euler drifted 8.8% on the momentum and gained 39% extra energy. It gains instead of losing because the ω update in it is plain explicit Euler (Euler's equation doesn't depend on the orientation), and explicit Euler on a rotation adds a little energy every step. Full numbers are in `results/physics.md`. One RK4 step costs about 0.3 to 0.4 microseconds natively, so speed isn't a reason to drop it.
 
 One simplification: I use the body inertia from the Iris file and leave out the four 5 g rotors. As point masses at the rotor positions they'd add 2.6% to Ixx, 0.8% to Iyy and 1.3% to Izz.
 
@@ -53,7 +53,7 @@ Interview questions:
 
 An orientation could be stored as three angles (roll, pitch, yaw), but Euler angles break at 90 degrees of pitch: two of the axes line up and you lose a direction (gimbal lock). A rotation matrix has no such problem but uses 9 numbers to say 3 things, and they slowly drift apart from being a real rotation. A quaternion uses 4 numbers (w, x, y, z), has no gimbal lock, and the only fix it ever needs is scaling back to length 1.
 
-A rotation by angle a about a unit axis n is q = (cos(a/2), sin(a/2) n). To rotate a body vector into the world I use q v q*. Spinning at body rate ω changes the quaternion at q̇ = ½ q ⊗ (0, ω). The order matters: ω is measured in the body frame, so it goes on the right. Put it on the left and the drone spins about world axes instead, which looks fine until the drone has yawed. I have a test for exactly that.
+A rotation by angle a about a unit axis n is q = (cos(a/2), sin(a/2) n). To rotate a body vector into the world I use q v q*. Spinning at body rate ω changes the quaternion at q̇ = ½ q ⊗ (0, ω). The order matters: ω is measured in the body frame, so it goes on the right. Put it on the left and the drone spins about world axes instead, which looks fine while the drone is level and goes wrong as soon as it isn't. I have a test for exactly that.
 
 Where it lives: `core/vecmath.h` (`Quat`, the product, `rotate`), and the `q` line in `derivative()` in `core/quad.cpp`. `step()` renormalizes after every step.
 
@@ -65,7 +65,7 @@ Interview questions:
 
 ## Thrust and torque from four motors
 
-Each rotor pushes straight up along body z with thrust T = k_f ω², where ω is how fast it spins. Four thrusts add up to the lift. Torque comes from where they push: a rotor at position r makes r × T. With x forward and y left, a rotor on the left side (y > 0) speeding up rolls the drone right side up on the left (positive roll), and a rotor in front (x > 0) speeding up pitches the nose up (negative pitch in my frame).
+Each rotor pushes straight up along body z with thrust T = k_f ω², where ω is how fast it spins. Four thrusts add up to the lift. Torque comes from where they push: a rotor at position r makes r × T. With x forward and y left, a rotor on the left side (y > 0) speeding up lifts the left side (positive roll), and a rotor in front (x > 0) speeding up pitches the nose up (negative pitch in my frame).
 
 Yaw is the odd one. A spinning rotor drags on the air, and the motor's push back twists the body the opposite way. That twist is 0.016 m times the thrust. Two rotors spin clockwise and two counterclockwise so the twists cancel at hover. To yaw, speed up one pair and slow the other by the same thrust: lift stays the same and the twists don't cancel. It's the weakest axis, 0.016 m against arms of 0.13 to 0.22 m.
 
@@ -73,7 +73,7 @@ The Iris is not a perfect X. The front arms are 0.22 m out to the side and the b
 
 Two smaller forces only matter when the drone moves through the air. Each rotor gets a drag force against its sideways air speed, -k |ω| v⊥, applied at the rotor, so it also makes a torque (the rotors sit 2.3 cm above the center of mass, so flying forward tips the nose up a little). There's also a tiny rolling moment. Both come straight from the RotorS motor model. Wind will enter through them later, since v⊥ is measured against the air. The sideways speed of each rotor includes the body's own spin (ω × r), so yawing on the spot gets a little drag pushing back, which is how RotorS does it too (it uses each rotor's own velocity).
 
-I matched RotorS line for line, including one quirk. Its rolling moment doesn't care which way a rotor spins, so on a quad the four add up instead of cancelling in pairs. Physically, a rotor moving sideways lifts more on the advancing blade, and which side that is depends on spin direction. I kept the RotorS version so every term traces back to one source. At 5 m/s and hover rotor speed it comes to 0.013 N m (the drag test checks that number). The one place I differ: I clamp rotor commands at zero as well as at 838 rad/s, since a real motor on this kind of drone doesn't reverse. RotorS only clamps the top.
+I matched RotorS term for term, including one quirk: its rolling moment doesn't care which way a rotor spins, so on a quad the four add up instead of cancelling in pairs. Physically, a rotor moving sideways lifts more on the advancing blade, and which side that is depends on spin direction. I kept the RotorS version so every term traces back to one source. At 5 m/s and hover rotor speed it comes to 0.013 N m (the drag test checks that number). RotorS adds the drag and rolling moment as world frame vectors and I add them in the body frame, which comes out the same. The one place I differ: I clamp rotor commands at zero as well as at 838 rad/s, since a real motor on this kind of drone doesn't reverse. RotorS only clamps the top.
 
 The rotor order in the code is the RotorS order: 0 front right (counterclockwise), 1 back left (counterclockwise), 2 front left (clockwise), 3 back right (clockwise).
 
