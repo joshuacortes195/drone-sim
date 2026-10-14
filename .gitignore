@@ -1,0 +1,12 @@
+# native and wasm build output
+build/
+build-*/
+
+# web app
+node_modules/
+dist/
+
+# editor and os junk
+.DS_Store
+.vscode/
+.idea/
