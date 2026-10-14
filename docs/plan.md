@@ -81,7 +81,7 @@ Scope questions, this plan, the rules file outside the repo, a CMake + doctest s
 
 Concepts to learn first: rigid body dynamics, quaternions, thrust and torque from four motors.
 
-- `core/math.h`: small vec3, quaternion and 3x3 helpers, only what the physics uses
+- `core/vecmath.h`: small vec3, quaternion and 3x3 helpers, only what the physics uses
 - `core/quad.{h,cpp}`: parameters, state (position, velocity, quaternion, body rates, rotor speeds), motor mixer, derivatives, `step(dt)`
 - tests:
   - equal rotor speeds whose thrust matches the weight hold a hover (no drift, no rotation over 10 s). The arms are uneven but symmetric left to right and front to back in x, so equal thrusts give zero torque
