@@ -80,21 +80,22 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'c') toggleCamera();
 });
 
-// sends the drone to waypoint i, facing the way it's about to fly
+// sends the drone to waypoint i, facing from where it is now toward it (straight up counts as facing east)
 let leg = 0;
 function sendTo(i: number) {
   const [x, y, z] = ROUTE[i];
-  const from = i === 0 ? ROUTE[ROUTE.length - 1] : ROUTE[i - 1];
-  const yaw = Math.atan2(y - from[1], x - from[0]);
+  const yaw = Math.atan2(y - now[1], x - now[0]);
   sim._set_target(x, y, z, yaw);
   target.position.set(x, y, z);
 }
 sendTo(leg);
 
 // moves on to the next waypoint once the drone is close enough to this one
+// plain squared distance instead of Math.hypot, whose rounding can differ between browsers
 function updateMission() {
   const [x, y, z] = ROUTE[leg];
-  if (Math.hypot(now[0] - x, now[1] - y, now[2] - z) < ARRIVED_M) {
+  const dx = now[0] - x, dy = now[1] - y, dz = now[2] - z;
+  if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) {
     leg = (leg + 1) % ROUTE.length;
     sendTo(leg);
   }
@@ -157,8 +158,9 @@ function frame(t: number) {
   last = t;
 
   // as many whole steps as the backlog covers
+  // floored at 0 because the rounding can leave a tiny negative leftover
   const steps = Math.floor(backlog / DT);
-  backlog -= steps * DT;
+  backlog = Math.max(0, backlog - steps * DT);
 
   // one step at a time until done or out of time, then drop what's left so a slow frame can't snowball
   // checking the mission after every step means waypoints switch on the same step on any machine

@@ -13,29 +13,32 @@ Measured 2026-10-15 on the Vite dev server with agent-browser driving a headed C
 
 ## Frame rate and physics rate
 
-The readout in the corner averages over half a second. I sampled it every 500 ms for 30 s (58 distinct windows) on the chase camera:
+The readout in the corner averages over half a second. I sampled it every 500 ms for 30 s on the chase camera, twice. Run A was the commit before the review fixes (same loop, arrival check with `Math.hypot`), with only this page open. Run B was the final code, while another project's GPU heavy page was open in a second browser on the same machine. The map view wasn't measured.
 
-| | min | median | max |
-|---|---|---|---|
-| frames per second | 60 | 60 | 60 |
-| physics steps per second | 999 | 1000 | 1002 |
-| physics time per frame (ms, coarse timer) | 0.02 | 0.04 | 0.09 |
+| | run A (58 windows) min / median / max | run B (59 windows) min / median / max |
+|---|---|---|
+| frames per second | 60 / 60 / 60 | 52 / 60 / 60 |
+| physics steps per second | 999 / 1000 / 1002 | 998 / 1000 / 1002 |
+| physics time per frame (ms, coarse timer) | 0.02 / 0.04 / 0.09 | 0.01 / 0.03 / 0.05 |
 
-60 fps is the display's refresh rate, and every half second window read 60 (the readout rounds to whole frames). The physics kept real time: 1000 steps of 1 ms each per second. No console errors or page errors on a fresh load. (Rebuilding the wasm while the dev server is open does throw a few errors: Vite reloads the page while Emscripten is part way through rewriting `drone.js` and `drone.wasm`, so for a moment they don't match. A reload after the build fixes it.)
+60 fps is the display's refresh rate (the readout rounds to whole frames). In run A every window read 60. In run B one window dropped to 52, with the other page sharing the GPU. Either way the physics kept real time: a median of 1000 steps of 1 ms each per second. No console errors or page errors on a fresh load. (Rebuilding the wasm while the dev server is open does throw a few errors: Vite reloads the page while Emscripten is part way through rewriting `drone.js` and `drone.wasm`, so for a moment they don't match. A reload after the build fixes it.)
 
 ## Cost of one step in the browser
 
-One `advance(100000)` call (controller plus RK4 physics, 100,000 steps of 1 ms) timed in the page, from hovering at 10 m with a target 22.4 m away, five runs:
+Two ways, each timed over 100,000 steps of 1 ms (controller plus RK4 physics) from hovering at 10 m with a target 22.4 m away, in the page on the final code:
 
-| run | µs per step |
-|---|---|
-| 1 | 0.671 |
-| 2 | 0.680 |
-| 3 | 0.661 |
-| 4 | 0.680 |
-| 5 | 0.670 |
+- batch: one `advance(100000)` call, the pure wasm cost
+- loop: the way the page actually runs it, one `advance(1)` call per step plus the arrival check and the `performance.now()` budget check
 
-So 1000 steps a second cost about 0.67 ms of CPU per real second, well under the 8 ms budget. Natively the two parts were measured separately: 308 to 394 ns per RK4 step (`results/physics.md`) and 268 to 300 ns per `control()` call (`results/control.md`).
+| run | batch µs per step | loop µs per step |
+|---|---|---|
+| 1 | 0.646 | 0.929 |
+| 2 | 0.642 | 0.905 |
+| 3 | 0.630 | 0.903 |
+| 4 | 0.624 | 0.885 |
+| 5 | 0.661 | 0.917 |
+
+An earlier batch run on the same wasm gave 0.661 to 0.680 µs. Calling in one step at a time costs about 40% more than the batch, so the page spends a bit under 1 ms of CPU per real second on physics, well under the 8 ms per frame budget. The per frame readout (median 0.03 to 0.04 ms, so 1.8 to 2.4 ms per second) reads higher than that, but it comes from the coarse timer and I don't trust it at this size. Natively the two parts were measured separately: 308 to 394 ns per RK4 step (`results/physics.md`) and 268 to 300 ns per `control()` call (`results/control.md`).
 
 ## Download size
 

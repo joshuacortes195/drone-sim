@@ -204,18 +204,18 @@ Interview questions:
 
 The browser draws a frame whenever the screen is ready for one. That's about every 16.7 ms on a 60 Hz screen, 7 ms on a 144 Hz one, and whatever a slow laptop manages. If I moved the physics forward by however long the last frame took, the same flight would come out differently on every machine. My controller gains were tuned at exactly 1 ms, and RK4 is only as accurate as its step. So the physics always moves in 1 ms steps, and each frame works out how many of those fit in the real time that has passed.
 
-The leftover time that hasn't been simulated yet goes in an accumulator (I call it the backlog). A 16.7 ms frame runs 16 steps and carries 0.7 ms over to the next frame. Over a second that comes out to 1000 steps, and my readout shows 999 to 1002 per half second window.
+The leftover time that hasn't been simulated yet goes in an accumulator (I call it the backlog). A 16.7 ms frame runs 16 steps and carries 0.7 ms over to the next frame. Over a second that comes out to 1000 steps, and my steps per second readout stays between 998 and 1002.
 
 The per frame budget is the safety valve. If a frame is slow, the next one owes more steps, which makes it slower too, and the tab locks up. People call that the spiral of death. I stop stepping after 8 ms of physics in one frame and throw away the rest of the backlog, so on a machine that can't keep up the drone flies in slow motion instead of freezing the page. A frame longer than 0.1 s (like switching back to a hidden tab) only counts as 0.1 s, so the drone doesn't jump ahead.
 
 Render interpolation handles the fraction of a step left in the backlog. I keep the last two physics states and draw the drone part way between them: positions blended in a straight line, orientation blended with slerp so it stays a proper rotation. It means the picture is up to one step behind the physics, in exchange for smooth motion. At 1 ms steps the gap is tiny (8 mm at 8 m/s), so here it's more the right habit than a visible fix. It matters a lot more for a 60 Hz or 30 Hz physics step.
 
-In the browser one step (controller plus RK4) costs about 0.67 µs, so a second of flight is under a millisecond of CPU and the page holds the display's 60 fps. The numbers are in `results/browser.md`.
+In the browser one step (controller plus RK4) costs about 0.65 µs of pure wasm, and about 0.9 µs the way the page calls it, one step at a time with the mission and budget checks. So a second of flight is under a millisecond of CPU, and on my Intel Mac (i5-8259U) the page holds the display's 60 fps. The numbers are in `results/browser.md`.
 
-Where it lives: `frame()` and `placeDrone()` in `web/src/main.ts`. The C++ side is `advance()` in `wasm/bindings.cpp`, which keeps the previous state for interpolation. I call it one step at a time and check the mission after each step, so a waypoint switches on the same step no matter how the frames fall. Each call crossing from JavaScript into wasm costs a little, but at 1000 calls a second it doesn't show.
+Where it lives: `frame()` and `placeDrone()` in `web/src/main.ts`. The C++ side is `advance()` in `wasm/bindings.cpp`, which keeps the previous state for interpolation. I call it one step at a time and check the mission after each step, so a waypoint switches on the same step no matter how the frames fall. That makes the flight the same step for step with the same wasm binary, on any frame rate. It isn't bit identical to the native build (different math library and compiler choices), and when the budget drops steps the sim falls behind the wall clock, but the steps it does run are the same. Calling in once per step costs about 40% more than one big batch, which is still well under a millisecond a second.
 
 Interview questions:
 - Why not just step the physics by the frame time?
 - What happens on a machine too slow to keep up, and how do you stop it freezing?
 - What does render interpolation cost you, and when does it matter?
-- How do you keep a simulation deterministic across different hardware?
+- How do you keep a simulation deterministic across different frame rates, and where does that guarantee stop?

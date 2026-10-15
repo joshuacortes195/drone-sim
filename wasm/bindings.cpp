@@ -49,7 +49,8 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
   sp.yaw = yaw;
 }
 
-// runs the controller and physics forward a few 1 ms steps, so js only crosses into wasm once a frame
+// runs the controller and physics forward some 1 ms steps. the page calls it one step at a time so it can check
+// the mission after each step, a big batch is only used to time the pure wasm cost
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
   for (int i = 0; i < steps; i++) {
     prev = s;
