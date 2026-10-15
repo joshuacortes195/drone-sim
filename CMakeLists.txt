@@ -36,3 +36,16 @@ if(NOT EMSCRIPTEN)
   target_compile_options(fly_route PRIVATE -Wall -Wextra)
   target_link_libraries(fly_route PRIVATE core)
 endif()
+
+# browser build: the core plus the bindings, written straight into the web app as an es module and a .wasm file
+if(EMSCRIPTEN)
+  add_executable(drone wasm/bindings.cpp)
+  target_link_libraries(drone PRIVATE core)
+  target_compile_options(drone PRIVATE -Wall -Wextra)
+  # fixed size memory that never grows, so the views js holds into it never go dead
+  target_link_options(drone PRIVATE
+    -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web
+    -sINITIAL_MEMORY=16MB -sALLOW_MEMORY_GROWTH=0
+    -sEXPORTED_RUNTIME_METHODS=HEAPF64 -sFILESYSTEM=0)
+  set_target_properties(drone PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/web/src/wasm)
+endif()

@@ -106,14 +106,16 @@ Concepts first: PID control, cascaded control loops, saturation and windup.
 - `tools/fly_route.cpp`: a reference point moves along a fixed 81.2 m route at 2 and 5 m/s, once with 3 m/s² ramps that stop at each waypoint and once at constant speed with sharp corners. Prints RMS and max distance to the reference and RMS cross track error, plus step responses, recovery from tipped starts and a 10 m step
 - result: `results/control.md` with gains, step response numbers, route errors and cost per call
 
-### Phase 3: browser
+### Phase 3: browser (done 2026-10-15)
 
 Concepts first: fixed timestep and why rendering is decoupled from physics.
 
-- Emscripten build and bindings (state out, commands in) using the sandbox's setup
-- Vite + TS app, three.js drone, ground and boxes, chase camera and top down view
-- fixed physics timestep with an accumulator and per frame budget, render interpolation
-- verify with agent-browser: no console errors, fps recorded in `results/browser.md`
+- `wasm/bindings.cpp`: one drone, its controller and setpoint. `reset()`, `set_target()` in, `advance(steps)` runs controller plus physics at 1 ms, and the last two states (17 doubles each) are read straight out of wasm memory. Rotor positions come from the C++ parameters so the 3D model can't drift from the physics. Built with the sandbox's Emscripten setup, single thread, 16 MB fixed memory, written into `web/src/wasm/` and committed so a deploy only needs node
+- `web/`: Vite + TS + three.js, no React yet (it comes with the panel in phase 6). Z up everywhere. Ground grid, 8 placeholder boxes (phase 4 swaps in the seeded map), the drone with orange front rotors, a ground shadow spot, a target marker
+- cameras: a chase camera 3 m behind and 1 m above along the heading with exponential easing, and an orthographic map view with north up and a heading arrow. `c` or the button switches
+- loop: fixed 1 ms step, accumulator, 8 ms physics budget per frame, frames capped at 0.1 s, one wasm call per step so waypoints switch on the same step on any machine, interpolation between the last two states (lerp and slerp)
+- demo mission: a 25 m square loop at 8 m, the next waypoint is sent within 1 m, the drone turns to face each leg
+- result: `results/browser.md`, 60 fps (the display's rate) and 1000 steps per second over 30 s, 0.67 µs per step in wasm, no console errors
 
 ### Phase 4: planning (tdd)
 
