@@ -4,7 +4,7 @@ An autonomous quadcopter simulator that runs in the browser. The drone has real 
 
 The physics, control, planning and estimation are written in C++ and tested natively. The same code is compiled to WebAssembly for the browser, where three.js draws the scene.
 
-Status: the flight physics is done and tested (6 degrees of freedom, quaternions, the four motor mixer with motor lag and rotor drag, RK4 at 1 ms). The flight controller is next. The full plan is in [docs/plan.md](docs/plan.md), and my notes on the physics and controls are in [docs/robotics-notes.md](docs/robotics-notes.md).
+Status: the flight physics and the flight controller are done and tested. The physics is 6 degrees of freedom with quaternions, the four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a 5 m/s route with 0.119 m RMS error. The browser build is next. The full plan is in [docs/plan.md](docs/plan.md), and my notes on the physics and controls are in [docs/robotics-notes.md](docs/robotics-notes.md).
 
 ## Build and test
 
@@ -20,4 +20,10 @@ To print the physics numbers in [results/physics.md](results/physics.md) (free f
 
 ```bash
 ./build/physics_report
+```
+
+To print the control numbers in [results/control.md](results/control.md) (step responses, route tracking error, cost per controller call):
+
+```bash
+./build/fly_route
 ```

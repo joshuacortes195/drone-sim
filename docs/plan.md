@@ -95,15 +95,16 @@ Concepts to learn first: rigid body dynamics, quaternions, thrust and torque fro
   - motor lag acts on ω: a step up matches 1 - e^(-t/τ) with τ = 0.0125 s at t = 13 ms, and a step down uses τ = 0.025 s
 - result: `results/physics.md` with free fall error and the RK4 vs Euler comparison on the spin test
 
-### Phase 2: flight controller (tdd)
+### Phase 2: flight controller (tdd, done 2026-10-15)
 
 Concepts first: PID control, cascaded control loops, saturation and windup.
 
-- `core/controller.{h,cpp}`: rate PID, attitude P on the quaternion error, velocity PID, position P, thrust and tilt limits, an inverse mixer from thrust and torques back to rotor speeds
-- tilt limit well under acos(1 / 1.61) = 51.6 degrees, the tilt where full throttle only just holds altitude. When the mixer saturates, yaw gives way first (with a 0.016 m moment constant it's the weakest axis), then roll and pitch, and total thrust is kept
-- tests: hover hold at a set point, step response in x, y, z and yaw with overshoot, settling time and steady state error inside set limits, no windup after saturating
-- `tools/fly_route.cpp`: flies a fixed waypoint route and prints RMS tracking error
-- result: `results/control.md` with gains, step response numbers and the route's RMS error
+- `core/controller.{h,cpp}`: rate PI, attitude P on the quaternion error, velocity PI, position P, thrust and tilt limits, an inverse mixer from thrust and torques back to rotor speeds. No D terms in the end, the tests didn't need them. Velocity and acceleration feed forward from the path (added after the route showed 0.65 m of lag on the speed ramps)
+- tilt limit 35 degrees, well under acos(1 / 1.61) = 51.6 degrees, the tilt where full throttle only just holds altitude. When the mixer saturates, yaw gives way first (with a 0.016 m moment constant it's the weakest axis), then roll and pitch, and total thrust is kept
+- anti windup by capping both integrals. Conditional integration was tried and removed (it made large moves worse, see `results/control.md`)
+- tests: mixer round trip and saturation order, hover hold, recovery from a 30 degree roll, 1 m steps in x, y, z and a 1 rad yaw step (under 10% overshoot, 2% settle under 4 s, 3 s for z), no windup after being held, feed forward tracking a 3 m/s² ramp
+- `tools/fly_route.cpp`: a reference point moves along a fixed 81.2 m route at 2 and 5 m/s, once with 3 m/s² ramps that stop at each waypoint and once at constant speed with sharp corners. Prints RMS and max distance to the reference and RMS cross track error
+- result: `results/control.md` with gains, step response numbers, route errors and cost per call
 
 ### Phase 3: browser
 

@@ -84,3 +84,114 @@ Interview questions:
 - Front left rotor speeds up by F newtons of thrust. What torques does that make? (+0.22 F roll, -0.13 F pitch, +0.016 F yaw on this airframe.)
 - Why is yaw authority so weak compared to roll and pitch?
 - Thrust goes as ω². What does that mean for a controller that commands thrust?
+
+## PID control
+
+A controller compares where something is with where I want it. The gap is the error, and the controller pushes back against it. The P term pushes in proportion to the error, like a spring. The I term adds the error up over time, so a steady push the P term can't cancel on its own (rotor drag at cruise speed, later wind) gets learned and the error goes to zero. The D term reacts to how fast the error is changing and damps oscillation, like a shock absorber.
+
+My drone ended up with P and I only. Nothing in the tests needed a D term, so I left it out. The motor lag is the slowest thing inside the rate loop (12.5 ms), and with a rate P gain of 20 the loop crosses over around 20 rad/s, which is well below the motors' 80 rad/s. That leaves plenty of phase margin without derivative action.
+
+The I term has a cost I saw in my own numbers. Any error during a transient also gets added up, and once the transient is over that stored integral has to bleed off again. For a PI loop like mine the bleed off has a time constant of kv / ki, which is 2.5 s with my velocity gains. That's why the drone ends a 30 degree recovery test 1.7 cm off at 6 s and then creeps the rest of the way in.
+
+Where it lives: `control()` and `outer_loop()` in `core/controller.cpp`. Gains are in `Gains` in `core/controller.h`.
+
+Interview questions:
+- What does each of P, I and D do, and what happens when each one is too high?
+- Why doesn't your rate loop have a D term?
+- Why does a PI loop sometimes creep slowly toward its target after a disturbance?
+
+## Cascaded control loops
+
+A quad can only push along its own z axis. To move sideways it has to tilt, to tilt it has to spin, and to spin it needs torque. So I stack four controllers, and each one hands the next one its setpoint:
+
+1. position error → velocity setpoint (P)
+2. velocity error → acceleration, which turns into a thrust vector, and that gives a tilt and a total thrust (PI)
+3. attitude error → body rate setpoint (P)
+4. rate error → angular acceleration → torque, through the inertia (PI)
+
+Then the mixer turns total thrust plus torque into four rotor speeds.
+
+Each loop has to be clearly faster than the one outside it, otherwise the outer loop asks for changes before the inner loop can deliver and the whole stack oscillates. My bandwidths step down by roughly 3x each level: rate 20, attitude 7, velocity 2.5, position 1. The rate and attitude loops run every 1 ms physics step. Position and velocity run every 20 steps (50 Hz), which is closer to what a real autopilot does, since GPS updates far slower than the gyro.
+
+I tuned from the inside out. Rate first, then attitude, then velocity and position. Most of the tuning was yaw, which I cover under saturation.
+
+The step from acceleration to attitude is the interesting one. I want the force f = m (a + g). The body z axis has to point along f, so I take the shortest rotation that tips world z onto f and combine it with the heading I want. The total thrust is f projected onto where body z points right now. Then the drone doesn't push hard in the wrong direction while it's still tilting.
+
+Results with these gains: 1 m steps in x, y and z settle into 2% in 1.41 to 1.86 s with 1.0 to 1.6% overshoot. A 1 rad heading change settles in 2.00 s with 2.2% overshoot. The full table is in `results/control.md`.
+
+Where it lives: `outer_loop()` (position, velocity, thrust vector, attitude setpoint) and `control()` (attitude and rate) in `core/controller.cpp`.
+
+Interview questions:
+- Why cascade the loops instead of one big controller?
+- How far apart should the loop bandwidths be, and what happens if they're too close?
+- How do you turn a desired acceleration into a tilt and a thrust?
+- Why tune from the inside out?
+
+## Saturation and windup
+
+The rotors have limits: 838 rad/s at the top and zero at the bottom. My airframe only has 1.6 times its weight in thrust, so it hits those limits often. Three things handle that.
+
+First, the outer loop limits what it asks for. The tilt is capped at 35 degrees, which is well under the 51.6 degrees where full throttle only just holds altitude. Total thrust stays between 20% and 90% of full, so there's always some room left to steer. The vertical part of the force gets priority, and the sideways part gets whatever the tilt limit and the leftover thrust allow.
+
+Second, the mixer has a priority order. When the rotors can't do everything, it keeps total thrust first, then as much roll and pitch as fits, then yaw. Yaw goes first because it's the weakest axis (0.016 m of moment against arms of 0.13 to 0.22 m) and losing it for a moment doesn't drop the drone.
+
+Third, anti windup. When the controller asks for more than the drone can give, the integral keeps adding up error it can't fix. When the drone finally gets there, all that stored integral shoves it past the target. I cap both integrals: 2 m/s² for velocity and 1 rad/s² for rate. I picked the rate cap from the physics. Rotor drag at 5 m/s makes about 0.53 rad/s² of pitch, so 1 covers it with room to spare.
+
+I tested windup by holding the drone still for 5 s with the goal 10 m away, then letting go. Its path matched a drone that was never held to under 0.1 mm. With the rate cap at 5 the paths differed by 7.6 cm, and with no cap at all the held one ended 19.8 m off.
+
+I also tried conditional integration, which stops the integral from growing while the output is clipped. It made a 10 m move worse (9.54 m after 3 s against 9.90 m without it) because it also stopped the integral from learning the rotor drag push during the sprint. I took it back out.
+
+Yaw taught me the most about saturation. My first yaw gains overshot a 1 rad step by 31%. The yaw torque can only give about 1.5 rad/s² of angular acceleration, so from 1.5 rad/s it needs about 0.75 rad to stop. The attitude loop only starts slowing it 0.5 rad out, so it overshoots no matter what the gains say. Capping yaw rate at 0.8 rad/s fixed it (2.2%).
+
+Where it lives: the limits and caps are in `Gains` in `core/controller.h`. Tilt and thrust limiting are in `outer_loop()`, the integral caps use `clamp3()`, and the priority order is in `mix()`, all in `core/controller.cpp`.
+
+Interview questions:
+- What is integrator windup and how do you prevent it?
+- When the motors saturate, which axis do you give up first, and why?
+- Why limit the tilt angle, and how did you pick 35 degrees?
+- Why did your yaw overshoot even with reasonable gains?
+
+## Attitude error from quaternions
+
+The attitude loop needs to know how far the drone still has to turn. With quaternions that's q_err = conj(q) ⊗ q_des, the rotation from where the body is to where it should be, seen from the body. For small angles the x, y, z part of a quaternion is half the angle times the axis, so 2 × (x, y, z) is the rotation still to go, and I multiply that by the attitude gain to get a body rate setpoint.
+
+q and -q are the same orientation, so q_err can come out describing the long way round (270 degrees instead of 90). If q_err.w is negative I flip its sign, and the drone always turns the short way.
+
+Subtracting Euler angles would break at 90 degrees of pitch and jump at ±180 degrees of yaw. The quaternion error has neither problem.
+
+Where it lives: the first lines of `control()` in `core/controller.cpp`.
+
+Interview questions:
+- Why use a quaternion error instead of subtracting roll, pitch and yaw?
+- What's the double cover problem and how do you handle it?
+- Why is twice the vector part a good attitude error?
+
+## The inverse mixer
+
+`wrench()` from phase 1 turns four rotor thrusts into a total thrust and three torques. That's a 4×4 linear map: thrust is the sum, roll is each thrust times its rotor's y, pitch is minus each thrust times its rotor's x, and yaw is minus spin direction × 0.016 × thrust. The controller needs the reverse, so `mix()` solves that same 4×4 system with Gauss Jordan elimination.
+
+I solve the real matrix instead of using the textbook symmetric X formula because my front arms are 0.22 m out and the back ones 0.20 m. The textbook version would add a little roll every time the drone yaws. Solving the real one means a pure yaw request gives pure yaw torque, and the round trip test checks that `wrench()` gives back exactly what `mix()` was asked for.
+
+Saturation works in layers. I solve for the thrust alone, then for the roll and pitch part, and scale that part down until no rotor goes below zero or above full thrust. Then I do the same for yaw with whatever room is left. Thrust is linear in ω², so I mix in thrust and take the square root at the end.
+
+Where it lives: `solve()`, `fit()` and `mix()` in `core/controller.cpp`.
+
+Interview questions:
+- How do you go from desired thrust and torques to four motor speeds?
+- What changes when the quad isn't perfectly symmetric?
+- Why mix in thrust and not in rotor speed?
+
+## Feed forward
+
+Feedback only reacts after an error shows up. Feed forward uses what I already know about the path: if the reference point is moving at 5 m/s and speeding up at 3 m/s², I add that velocity and acceleration straight into the commands, and the feedback loops only fix what's left.
+
+I measured it on my test route (81.2 m with climbs) where the reference speeds up and slows down at 3 m/s² between waypoints. With velocity feed forward only, the RMS error at 5 m/s was 0.652 m. Adding acceleration feed forward brought it to 0.119 m with the same gains. Without it, the velocity loop has to fall 1.2 m/s behind (3 / 2.5) before it asks for the acceleration the ramp needs.
+
+The same route with instant 90 degree corners at constant speed shows a limit. At 5 m/s a corner needs a 7.1 m/s change in velocity, and 35 degrees of tilt gives at most 6.9 m/s², so the drone falls up to 5.5 m behind. That's a reference the drone can't fly. The planner in phase 4 has to smooth corners for that reason.
+
+Where it lives: `Setpoint::vel` and `Setpoint::acc` in `core/controller.h`, used in `outer_loop()`. The route and both reference types are in `tools/fly_route.cpp`, and the numbers are in `results/control.md`.
+
+Interview questions:
+- What's the difference between feedback and feed forward, and why use both?
+- Why did acceleration feed forward help so much on the ramps?
+- What makes a reference trajectory feasible for a quad?
