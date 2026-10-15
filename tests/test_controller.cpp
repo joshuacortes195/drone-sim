@@ -140,7 +140,8 @@ static Release let_go(int hold_ms) {
   Setpoint sp;
   sp.pos = {10, 0, 10};
   QuadState s = hovering();
-  // held still, the controller keeps asking and its integrals keep seeing error
+  // held still, the controller keeps asking and its integrals keep seeing error. hold_ms is a multiple
+  // of outer_every (20) so the slow loop ticks at the same moments as in the free run
   for (int i = 0; i < hold_ms; i++) control(c, P, s, sp, 0.001);
   Release r;
   for (int i = 1; i <= 15000; i++) {
@@ -176,4 +177,70 @@ TEST_CASE("feed forward: chasing a point that speeds up at 3 m/s^2 to 5 m/s, it 
     worst = std::max(worst, norm(s.p - sp.pos));
   }
   CHECK(worst < 0.3);
+}
+
+// starts hovering but tipped by `angle` about x, flies 10 s, reports the worst height lost and the end state
+static QuadState recover_from(double angle, double& lowest) {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {0, 0, 10};
+  QuadState s = hovering();
+  s.q = axis_angle({1, 0, 0}, angle);
+  lowest = s.p.z;
+  for (int i = 0; i < 10000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    lowest = std::min(lowest, s.p.z);
+  }
+  return s;
+}
+
+TEST_CASE("flipped 120 degrees or fully upside down, it rights itself and gets back to the set point") {
+  for (double angle : {2.094, 3.1416}) {
+    CAPTURE(angle);
+    double lowest;
+    QuadState s = recover_from(angle, lowest);
+    CHECK(tilt(s.q) < 0.01);
+    CHECK(norm(s.p - Vec3{0, 0, 10}) < 0.05);
+    CHECK(lowest > 0);  // never lost more than the 10 m it started with
+  }
+}
+
+TEST_CASE("1 m step down in z: under 10% overshoot, settled in 3 s (down is slower motors, not a mirror of up)") {
+  StepInfo r = step_response(Gains{}, 2, -1.0, 10.0);
+  CHECK(r.overshoot < 0.10);
+  CHECK(r.settle < 3.0);
+  CHECK(r.final_err < 0.01);
+}
+
+TEST_CASE("yaw from -3.0 to 3.0 rad turns the short way through 180 degrees, not back through 0") {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {0, 0, 10};
+  sp.yaw = 3.0;
+  QuadState s = hovering();
+  s.q = axis_angle({0, 0, 1}, -3.0);
+  // the short way is 0.28 rad through +-pi, so the heading should never get near 0
+  double closest_to_zero = 10;
+  for (int i = 0; i < 5000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    closest_to_zero = std::min(closest_to_zero, std::abs(yaw_of(s.q)));
+  }
+  CHECK(closest_to_zero > 2.9);
+  CHECK(std::abs(yaw_of(s.q) - 3.0) < 0.01);
+}
+
+TEST_CASE("facing 90 degrees left, a 1 m step in x still flies along world x") {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {1, 0, 10};
+  sp.yaw = 1.5708;
+  QuadState s = hovering();
+  s.q = axis_angle({0, 0, 1}, 1.5708);
+  double worst_y = 0;
+  for (int i = 0; i < 6000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    worst_y = std::max(worst_y, std::abs(s.p.y));
+  }
+  CHECK(worst_y < 0.02);
+  CHECK(norm(s.p - sp.pos) < 0.01);
 }

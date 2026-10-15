@@ -1,6 +1,6 @@
 # Control results (phase 2)
 
-Measured 2026-10-15 with `tools/fly_route.cpp` unless a section says otherwise.
+Measured 2026-10-15 with `tools/fly_route.cpp` unless a section says otherwise. Everything except the two modified-copy windup numbers is printed by that tool.
 
 ## How
 
@@ -65,24 +65,36 @@ Same ramped route, before and after adding the path's acceleration to the veloci
 
 Without it, the velocity loop has to fall behind by a / kv = 3 / 2.5 = 1.2 m/s before it asks for the 3 m/s² the ramp needs.
 
-## Other checks from the tests
+## Recovering from a tipped start
 
-Measured with small scratch programs that run the same scenarios as the tests, same gains and build flags.
+Hovering at 10 m with the set point right there, but tipped about x by the angle shown, then 10 s of flight.
 
-- starting rolled 30° at the set point: the worst it strays is 0.222 m, it's level within the first second, and it's 1.7 cm off at 6 s. The last centimeter or two bleeds off slowly because the velocity integral charged during the first lurch (time constant kv / ki = 2.5 s)
-- held still for 5 s with the goal 10 m away, then let go: its path matches a run that was never held to under 0.1 mm at every 100 ms sample. With the rate integral cap at 5 instead of 1 the gap is 7.6 cm, and with no cap at all the held run ends up 19.8 m away from the free one
-- 10 m step in x (no path, just a set point jump): within 6.3 cm at 3 s, 4.5 mm off at 15 s
+| start tilt | worst distance from set point | height lost | back under 5° tilt | off at 6 s | off at 10 s |
+|---|---|---|---|---|---|
+| 30° | 0.222 m | 0.039 m | 0.18 s | 1.71 cm | 0.44 cm |
+| 120° | 4.100 m | 2.822 m | 0.61 s | 11.2 cm | 3.7 cm |
+| 180° (upside down) | 9.892 m | 8.970 m | 0.87 s | 1.106 m | 2.3 cm |
+
+The slow last few centimeters come from the velocity integral, which charged up during the first lurch and bleeds off with a time constant of kv / ki = 2.5 s. From upside down it loses almost 9 m: the thrust never goes below its 20% floor, and while the drone is still inverted that floor pushes it down. The floor has to be there anyway, because with zero thrust the mixer has nothing to steer with. Before I added it, a drone started upside down never turned over and fell 481 m in 10 s.
+
+## 10 m step in x
+
+A plain set point jump with no path, so the speed cap, the tilt limit and the integral all come into play: 9.937 m at 3 s, 9.801 m at 5 s (it brakes a little early and creeps back in), 9.9955 m at 15 s, and no overshoot past 10 m.
+
+## Windup
+
+From `tests/test_controller.cpp`: held still for 5 s with the goal 10 m away, then let go, its path matches a run that was never held to under 0.1 mm at every 100 ms sample. Measured once with a modified copy, everything else the same: with the rate integral cap at 5 instead of 1 the two paths differ by up to 7.6 cm, and with no rate cap at all they're up to 19.8 m apart.
 
 ## Cost
 
-One `control()` call (the outer loop runs on every 20th call, the mixer's 4×4 solves on every call), averaged over 2,000,000 calls: 274 to 300 ns across three runs.
+One `control()` call (the outer loop runs on every 20th call, the mixer's 4×4 solves on every call), averaged over 2,000,000 calls: 268 to 300 ns across six runs.
 
 ## Tuning history
 
 What changed while tuning, all measured with the same step scoring:
 
-- first gains: yaw overshot 31.3% (yaw rate cap 1.5 rad/s, yaw rate I 4). Yaw torque can only give about 1.5 rad/s², so from 1.5 rad/s it needs about 0.75 rad to stop, but the attitude P only starts slowing down 0.5 rad out. Capping yaw rate at 0.8 rad/s and setting yaw rate I to 2 brought it to 2.2%
+- first gains: yaw overshot 31.3% (yaw rate cap 1.5 rad/s, yaw rate I 4, rate integral cap 5). With the cap at its final value of 1 those yaw gains still overshoot 18.8%. Yaw torque can only give about 1.5 rad/s², so from 1.5 rad/s it needs about 0.75 rad to stop, but the attitude P only starts slowing down 0.5 rad out. Capping yaw rate at 0.8 rad/s and setting yaw rate I to 2 brought it to 2.2%
 - velocity I 0.5 → 1: x settle went from 2.05 s to 1.85 s with overshoot 0.9% → 1.1%, and the 10 m move ended closer
-- tried conditional integration (stop adding to the velocity integral while the tilt or thrust limit clips the output). On the 10 m move it was at 9.54 m after 3 s, against 9.90 m without it, because it also stopped the integral learning the rotor drag push it needs at cruise speed. Removed it. The caps do the anti windup work
-- rate integral cap 5 → 1 rad/s²: rotor drag at 5 m/s makes about 0.53 rad/s² of pitch (4 rotors × 8.06e-5 × 660 rad/s × 5 m/s ≈ 1.06 N, acting 0.023 m above the center, over Iyy 0.0459), so 1 still covers it and winds up far less
+- tried conditional integration (stop adding to the velocity integral while the tilt or thrust limit clips the output). On the 10 m move (speed cap still 5 m/s then) it was at 9.54 m after 3 s, against 9.90 m without it, because it also stopped the integral learning the rotor drag push it needs at cruise speed. Removed it. The caps do the anti windup work
+- rate integral cap 5 → 1 rad/s²: rotor drag at 5 m/s makes about 0.53 rad/s² of pitch (4 rotors × 8.06e-5 × 660 rad/s × 5 m/s ≈ 1.06 N, acting 0.023 m above the center, over Iyy 0.0459), and the rolling moment adds about 0.38 rad/s² of roll (4 × 1e-6 × 660 × 5 = 0.0132 N m over Ixx 0.0348). Both fit under 1, which winds up far less
 - horizontal speed cap 5 → 8 m/s: with a 5 m/s path and a 5 m/s cap, the velocity set point had no room to catch up once it fell behind

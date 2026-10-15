@@ -117,6 +117,10 @@ I tuned from the inside out. Rate first, then attitude, then velocity and positi
 
 The step from acceleration to attitude is the interesting one. I want the force f = m (a + g). The body z axis has to point along f, so I take the shortest rotation that tips world z onto f and combine it with the heading I want. The total thrust is f projected onto where body z points right now. Then the drone doesn't push hard in the wrong direction while it's still tilting.
 
+That projection gave me my one real control bug. Tipped 90 degrees or more from f, the projection is zero or negative, so the thrust went to zero. With zero thrust the mixer can't make any torque either, so a drone started upside down never turned over and fell 481 m in 10 s. The reviewer found it, and none of my tests started past 30 degrees. Now the thrust never goes below the same 20% floor the outer loop uses, and a test flies it back from 120 and 180 degrees. From upside down it still loses almost 9 m of height, because the floor pushes it down until it's turned over.
+
+One small approximation: I apply the heading before the tilt, so while the drone is tilted its actual heading is a little off from the setpoint (about 1.05 rad for a 1.0 rad setpoint at 35 degrees of tilt on a diagonal). It's exact in hover, so I left it.
+
 Results with these gains: 1 m steps in x, y and z settle into 2% in 1.41 to 1.86 s with 1.0 to 1.6% overshoot. A 1 rad heading change settles in 2.00 s with 2.2% overshoot. The full table is in `results/control.md`.
 
 Where it lives: `outer_loop()` (position, velocity, thrust vector, attitude setpoint) and `control()` (attitude and rate) in `core/controller.cpp`.
@@ -137,7 +141,7 @@ Second, the mixer has a priority order. When the rotors can't do everything, it 
 
 Third, anti windup. When the controller asks for more than the drone can give, the integral keeps adding up error it can't fix. When the drone finally gets there, all that stored integral shoves it past the target. I cap both integrals: 2 m/s² for velocity and 1 rad/s² for rate. I picked the rate cap from the physics. Rotor drag at 5 m/s makes about 0.53 rad/s² of pitch, so 1 covers it with room to spare.
 
-I tested windup by holding the drone still for 5 s with the goal 10 m away, then letting go. Its path matched a drone that was never held to under 0.1 mm. With the rate cap at 5 the paths differed by 7.6 cm, and with no cap at all the held one ended 19.8 m off.
+I tested windup by holding the drone still for 5 s with the goal 10 m away, then letting go. Its path matched a drone that was never held to under 0.1 mm. With the rate cap at 5 the paths differed by up to 7.6 cm, and with no cap at all they were up to 19.8 m apart.
 
 I also tried conditional integration, which stops the integral from growing while the output is clipped. It made a 10 m move worse (9.54 m after 3 s against 9.90 m without it) because it also stopped the integral from learning the rotor drag push during the sprint. I took it back out.
 

@@ -109,7 +109,9 @@ Rotors control(Controller& c, const QuadParams& P, const QuadState& s, const Set
   double m = g.rate_i_max;
   c.rate_int = clamp3(c.rate_int + mul(g.rate_i, we) * dt, {m, m, m});
   Vec3 torque = mul(P.inertia, mul(g.rate_p, we) + c.rate_int);
-  // collective thrust is the wanted force along where body z points right now
-  double thrust = std::max(dot(c.force_sp, rotate(s.q, {0, 0, 1})), 0.0);
+  // collective thrust is the wanted force along where body z points right now, never under the floor,
+  // since with no thrust the mixer has nothing to steer with and a flipped drone could never right itself
+  double floor = g.thrust_min * 4 * P.k_f * P.max_rotor_speed * P.max_rotor_speed;
+  double thrust = std::max(dot(c.force_sp, rotate(s.q, {0, 0, 1})), floor);
   return mix(P, thrust, torque);
 }

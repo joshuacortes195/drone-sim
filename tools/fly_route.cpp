@@ -90,6 +90,51 @@ static RouteInfo fly_route(double cruise, double accel) {
   return {std::sqrt(sum_ref / n), max_ref, std::sqrt(sum_cross / n), n * 0.001};
 }
 
+// starts hovering at 10 m tipped by `angle` about x and flies 10 s holding (0, 0, 10). prints the worst
+// distance from the set point, the most height lost, when it first got back under 5 degrees of tilt, and
+// how far off it is at 6 s and 10 s
+static void recovery(double angle) {
+  QuadParams P;
+  Controller c;
+  Setpoint sp;
+  sp.pos = {0, 0, 10};
+  QuadState s;
+  s.p = sp.pos;
+  double w = std::sqrt(P.mass * 9.81 / (4 * P.k_f));
+  s.rotor = {w, w, w, w};
+  s.q = axis_angle({1, 0, 0}, angle);
+  double worst = 0, lowest = 10, level_at = -1, at6 = 0;
+  for (int i = 1; i <= 10000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    worst = std::max(worst, norm(s.p - sp.pos));
+    lowest = std::min(lowest, s.p.z);
+    if (level_at < 0 && rotate(s.q, {0, 0, 1}).z > std::cos(0.0873)) level_at = i * 0.001;
+    if (i == 6000) at6 = norm(s.p - sp.pos);
+  }
+  std::printf("  %3.0f deg  worst %.3f m  height lost %.3f m  under 5 deg tilt at %.2f s  off by %.4f m at 6 s, %.4f m at 10 s\n",
+              angle * 57.2958, worst, 10 - lowest, level_at, at6, norm(s.p - sp.pos));
+}
+
+// a plain 10 m set point jump in x with no path, where the speed and tilt limits and the integral all matter
+static void big_step() {
+  QuadParams P;
+  Controller c;
+  Setpoint sp;
+  sp.pos = {10, 0, 10};
+  QuadState s;
+  s.p = {0, 0, 10};
+  double w = std::sqrt(P.mass * 9.81 / (4 * P.k_f));
+  s.rotor = {w, w, w, w};
+  double past = 0;
+  std::printf("  ");
+  for (int i = 1; i <= 15000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    past = std::max(past, s.p.x - 10);
+    if (i == 3000 || i == 5000 || i == 15000) std::printf("x at %.0f s %.4f m   ", i * 0.001, s.p.x);
+  }
+  std::printf("overshoot %.4f m\n", past);
+}
+
 // average time for one control() call on a drone hovering in place
 static double control_ns() {
   QuadParams P;
@@ -130,5 +175,9 @@ int main() {
                   r.rms_ref, r.max_ref, r.rms_cross);
     }
   }
+  std::printf("recovering from a tipped start\n");
+  for (double angle : {0.5236, 2.0944, 3.1416}) recovery(angle);
+  std::printf("10 m step in x\n");
+  big_step();
   std::printf("control() call: %.0f ns\n", control_ns());
 }
