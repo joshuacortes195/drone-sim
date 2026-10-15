@@ -6,9 +6,9 @@
 // thrust is kept, then roll and pitch, and yaw gives way first
 Rotors mix(const QuadParams& P, double thrust, Vec3 torque);
 
-// where the drone should be: a position, a velocity to follow along a path (zero to just hold) and a heading
+// where the drone should be: a position, the path's own velocity and acceleration (zero to just hold) and a heading
 struct Setpoint {
-  Vec3 pos, vel;
+  Vec3 pos, vel, acc;
   double yaw = 0;
 };
 
@@ -23,7 +23,7 @@ struct Gains {
   Vec3 rate_i = {10, 10, 2};
   double rate_i_max = 1;           // most the rate integral can push, rad/s^2, about twice the rotor drag torque at 5 m/s
   Vec3 max_rate = {4, 4, 0.8};     // rad/s, yaw kept slow so its weak torque can still stop it in time
-  double max_speed_xy = 5, max_speed_z = 2;  // m/s
+  double max_speed_xy = 8, max_speed_z = 2;  // m/s, leaves room to catch up on a 5 m/s path
   double max_tilt = 0.6109;        // 35 degrees, well under the 51.6 where full throttle only just holds altitude
   double thrust_min = 0.2, thrust_max = 0.9;  // share of full thrust, leaves room to steer at both ends
   int outer_every = 20;            // position and velocity at 50 Hz on a 1 ms step

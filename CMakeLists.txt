@@ -30,4 +30,9 @@ if(NOT EMSCRIPTEN)
   add_executable(physics_report tools/physics_report.cpp)
   target_compile_options(physics_report PRIVATE -Wall -Wextra)
   target_link_libraries(physics_report PRIVATE core)
+
+  # flies the test route and prints step responses and tracking error for results/control.md
+  add_executable(fly_route tools/fly_route.cpp)
+  target_compile_options(fly_route PRIVATE -Wall -Wextra)
+  target_link_libraries(fly_route PRIVATE core)
 endif()

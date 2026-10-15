@@ -160,3 +160,20 @@ TEST_CASE("no windup: held 5 s with the goal 10 m away, it flies the same as if 
   for (int i = 0; i < 150; i++) gap = std::max(gap, std::abs(held.x[i] - free.x[i]));
   CHECK(gap < 0.01);
 }
+
+TEST_CASE("feed forward: chasing a point that speeds up at 3 m/s^2 to 5 m/s, it stays within 30 cm") {
+  Controller c;
+  QuadState s = hovering();
+  double worst = 0;
+  for (int i = 1; i <= 5000; i++) {
+    double t = i * 0.001, ramp = 5.0 / 3.0;
+    // the reference speeds up along x, then cruises at 5 m/s
+    Setpoint sp;
+    sp.pos = {t < ramp ? 1.5 * t * t : 1.5 * ramp * ramp + 5 * (t - ramp), 0, 10};
+    sp.vel = {t < ramp ? 3 * t : 5, 0, 0};
+    sp.acc = {t < ramp ? 3.0 : 0.0, 0, 0};
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    worst = std::max(worst, norm(s.p - sp.pos));
+  }
+  CHECK(worst < 0.3);
+}

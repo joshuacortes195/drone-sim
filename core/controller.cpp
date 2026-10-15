@@ -75,11 +75,11 @@ static void outer_loop(Controller& c, const QuadParams& P, const QuadState& s, c
   double h = std::hypot(v_sp.x, v_sp.y);
   if (h > g.max_speed_xy) v_sp = {v_sp.x * g.max_speed_xy / h, v_sp.y * g.max_speed_xy / h, v_sp.z};
   v_sp.z = std::clamp(v_sp.z, -g.max_speed_z, g.max_speed_z);
-  // velocity error becomes an acceleration, the integral is capped so it can't wind up
+  // velocity error becomes an acceleration on top of the path's own, the integral is capped so it can't wind up
   Vec3 e = v_sp - s.v;
   double m = g.vel_i_max;
   c.vel_int = clamp3(c.vel_int + mul(g.vel_i, e) * dt, {m, m, m});
-  Vec3 a = mul(g.vel_p, e) + c.vel_int;
+  Vec3 a = sp.acc + mul(g.vel_p, e) + c.vel_int;
   // force that makes that acceleration while holding up the weight
   Vec3 f = (a + Vec3{0, 0, 9.81}) * P.mass;
   // up and down first, then sideways gets whatever the tilt limit and the thrust left over allow
