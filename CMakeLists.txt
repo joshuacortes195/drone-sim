@@ -11,10 +11,17 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# warning flags, msvc on windows uses its own spelling
+if(MSVC)
+  set(WARN_FLAGS /W4)
+else()
+  set(WARN_FLAGS -Wall -Wextra)
+endif()
+
 # the drone physics, shared by the tests, tools and later the browser build
 add_library(core core/quad.cpp core/controller.cpp)
 target_include_directories(core PUBLIC core)
-target_compile_options(core PRIVATE -Wall -Wextra)
+target_compile_options(core PRIVATE ${WARN_FLAGS})
 
 # native test runner, skipped when building for the browser
 if(NOT EMSCRIPTEN)
@@ -22,18 +29,18 @@ if(NOT EMSCRIPTEN)
   add_executable(tests tests/test_main.cpp tests/test_quad.cpp tests/test_controller.cpp)
   target_include_directories(tests SYSTEM PRIVATE third_party/doctest)
   target_include_directories(tests PRIVATE tools)
-  target_compile_options(tests PRIVATE -Wall -Wextra)
+  target_compile_options(tests PRIVATE ${WARN_FLAGS})
   target_link_libraries(tests PRIVATE core)
   add_test(NAME tests COMMAND tests)
 
   # prints the physics numbers for results/physics.md
   add_executable(physics_report tools/physics_report.cpp)
-  target_compile_options(physics_report PRIVATE -Wall -Wextra)
+  target_compile_options(physics_report PRIVATE ${WARN_FLAGS})
   target_link_libraries(physics_report PRIVATE core)
 
   # flies the test route and prints step responses and tracking error for results/control.md
   add_executable(fly_route tools/fly_route.cpp)
-  target_compile_options(fly_route PRIVATE -Wall -Wextra)
+  target_compile_options(fly_route PRIVATE ${WARN_FLAGS})
   target_link_libraries(fly_route PRIVATE core)
 endif()
 
@@ -41,7 +48,7 @@ endif()
 if(EMSCRIPTEN)
   add_executable(drone wasm/bindings.cpp)
   target_link_libraries(drone PRIVATE core)
-  target_compile_options(drone PRIVATE -Wall -Wextra)
+  target_compile_options(drone PRIVATE ${WARN_FLAGS})
   # fixed size memory that never grows, so the views js holds into it never go dead
   target_link_options(drone PRIVATE
     -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web
