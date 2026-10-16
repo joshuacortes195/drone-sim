@@ -1,23 +1,8 @@
 import * as THREE from 'three';
 import type { Drone } from './wasm/drone';
 
-// a box sitting on the ground: center x and y, size x and y, height, all in meters
-export type Box = [cx: number, cy: number, sx: number, sy: number, h: number];
-
-// placeholder buildings around the demo route until the seeded city map lands in phase 4
-export const BOXES: Box[] = [
-  [12.5, 12.5, 10, 10, 15],
-  [5, 19, 3, 3, 6],
-  [-8, 10, 6, 10, 12],
-  [35, 8, 8, 6, 9],
-  [14, 35, 10, 6, 16],
-  [32, 32, 6, 6, 6],
-  [-6, -8, 5, 5, 7],
-  [12, -9, 8, 5, 11],
-];
-
-// sky, light, ground grid and the buildings
-export function buildWorld(scene: THREE.Scene) {
+// sky, light, ground grid and the buildings. boxes holds 6 numbers per building: low x y z, high x y z
+export function buildWorld(scene: THREE.Scene, boxes: Float64Array) {
   // pale sky with fog so far away things fade out
   scene.background = new THREE.Color(0xcfd8e3);
   scene.fog = new THREE.Fog(0xcfd8e3, 60, 180);
@@ -38,9 +23,10 @@ export function buildWorld(scene: THREE.Scene) {
 
   // one box mesh per building, lifted so it sits on the ground
   const boxMat = new THREE.MeshLambertMaterial({ color: 0x8796a8 });
-  for (const [cx, cy, sx, sy, h] of BOXES) {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, h), boxMat);
-    box.position.set(cx, cy, h / 2);
+  for (let i = 0; i < boxes.length; i += 6) {
+    const [x0, y0, z0, x1, y1, z1] = boxes.subarray(i, i + 6);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), boxMat);
+    box.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     scene.add(box);
   }
 }
@@ -81,6 +67,13 @@ export function buildShadow() {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.35, 24), mat);
   shadow.position.z = 0.02;
   return shadow;
+}
+
+// the planned path as a line, its points get swapped in each time the drone plans
+export function buildPath() {
+  const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x2a9d8f }));
+  line.frustumCulled = false;
+  return line;
 }
 
 // small marker where the drone is being sent

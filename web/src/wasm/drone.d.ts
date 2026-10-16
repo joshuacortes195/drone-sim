@@ -8,6 +8,11 @@ export interface Drone {
   _state_prev(): number;
   _rotor_pos(i: number, axis: number): number;
   _step_size(): number;
+  _new_city(seed: number): number;
+  _boxes_ptr(): number;
+  _fly_to(x: number, y: number, z: number): number;
+  _path_ptr(): number;
+  _path_done(): number;
 }
 
 // loads the .wasm file and resolves once the module is ready

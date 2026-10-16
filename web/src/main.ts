@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import createDrone from './wasm/drone.js';
-import { buildDrone, buildMapArrow, buildShadow, buildTarget, buildWorld } from './scene';
+import { buildDrone, buildMapArrow, buildPath, buildShadow, buildTarget, buildWorld } from './scene';
 
 // the physics is z up (x east, y north), so every three.js object is too
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -10,12 +10,16 @@ const PHYSICS_BUDGET_MS = 8;
 // a frame longer than this (like coming back to a hidden tab) only counts this much, so the drone doesn't jump ahead
 const MAX_FRAME_S = 0.1;
 
-// demo loop around the placeholder buildings at 8 m, the next point is sent once the drone gets within 1 m
-const ROUTE: [number, number, number][] = [
-  [0, 0, 8],
-  [25, 0, 8],
-  [25, 25, 8],
-  [0, 25, 8],
+// which seeded city to fly in
+const SEED = 1;
+// demo loop over street crossings at different heights, the low ones make it weave between buildings.
+// the next goal is planned once the path is done and the drone is within 1 m of its end
+const GOALS: [number, number, number][] = [
+  [18, 18, 4],
+  [-18, 18, 12],
+  [-18, -18, 3],
+  [18, -6, 7],
+  [0, 0, 5],
 ];
 const ARRIVED_M = 1;
 
@@ -23,6 +27,8 @@ const ARRIVED_M = 1;
 const sim = await createDrone();
 const DT = sim._step_size();
 sim._reset(0, 0, 1.5, 0);
+// builds the city in the wasm side, the page reads its buildings back to draw them
+const boxes = new Float64Array(sim.HEAPF64.buffer, sim._boxes_ptr(), 6 * sim._new_city(SEED));
 
 // views into the two state buffers: p 0-2, v 3-5, q (w x y z) 6-9, body rates 10-12, rotors 13-16
 const now = new Float64Array(sim.HEAPF64.buffer, sim._state_now(), 17);
@@ -36,12 +42,13 @@ document.body.appendChild(renderer.domElement);
 
 // the world, the drone, its ground shadow, the target marker and the map view arrow
 const scene = new THREE.Scene();
-buildWorld(scene);
+buildWorld(scene, boxes);
 const drone = buildDrone(sim);
+const pathLine = buildPath();
 const shadow = buildShadow();
 const target = buildTarget();
 const arrow = buildMapArrow();
-scene.add(drone, shadow, target, arrow);
+scene.add(drone, shadow, target, arrow, pathLine);
 
 // two cameras: one following behind the drone, and a flat map view looking straight down with north up
 const chase = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 500);
@@ -80,25 +87,34 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'c') toggleCamera();
 });
 
-// sends the drone to waypoint i, facing from where it is now toward it (straight up counts as facing east)
+// plans a path from where the drone is to goal i and starts flying it, skipping goals it can't reach
 let leg = 0;
-function sendTo(i: number) {
-  const [x, y, z] = ROUTE[i];
-  const yaw = Math.atan2(y - now[1], x - now[0]);
-  sim._set_target(x, y, z, yaw);
-  target.position.set(x, y, z);
+let planMs = 0;
+let pathEnd = [0, 0, 0];
+function goTo(i: number) {
+  for (let tries = 0; tries < GOALS.length; tries++, i = (i + 1) % GOALS.length) {
+    const [x, y, z] = GOALS[i];
+    const t0 = performance.now();
+    const n = sim._fly_to(x, y, z);
+    planMs = performance.now() - t0;
+    if (n === 0) continue;
+    // draw the new path and remember where it ends
+    const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
+    pathLine.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    pathEnd = [pts[3 * n - 3], pts[3 * n - 2], pts[3 * n - 1]];
+    target.position.set(pathEnd[0], pathEnd[1], pathEnd[2]);
+    leg = i;
+    return;
+  }
 }
-sendTo(leg);
+goTo(leg);
 
-// moves on to the next waypoint once the drone is close enough to this one
+// moves on to the next goal once the path is flown and the drone is close enough to its end
 // plain squared distance instead of Math.hypot, whose rounding can differ between browsers
 function updateMission() {
-  const [x, y, z] = ROUTE[leg];
-  const dx = now[0] - x, dy = now[1] - y, dz = now[2] - z;
-  if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) {
-    leg = (leg + 1) % ROUTE.length;
-    sendTo(leg);
-  }
+  if (!sim._path_done()) return;
+  const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
+  if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
 }
 
 // draws the drone part way between the last two physics states, alpha is how far past the older one we are

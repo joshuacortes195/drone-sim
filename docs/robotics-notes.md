@@ -219,3 +219,59 @@ Interview questions:
 - What happens on a machine too slow to keep up, and how do you stop it freezing?
 - What does render interpolation cost you, and when does it matter?
 - How do you keep a simulation deterministic across different frame rates, and where does that guarantee stop?
+
+## Occupancy grids and growing the obstacles
+
+My planner doesn't look at buildings directly. It cuts the 60 x 60 x 20 m flying area into 0.5 m cubes, 120 x 120 x 40 = 576,000 cells, and marks each one free or blocked. That turns "fly through a city" into "find a way through a 3D maze", which is a problem search algorithms already solve well. A finer grid fits tighter gaps but costs memory and search time: 0.1 m cells would be 125 times as many.
+
+The drone isn't a point, so before marking cells I grow every building by how far the drone reaches plus a bit. The reach is 0.256 m from the center to the farthest rotor plus the 0.1 m rotor radius. On top of that goes half a cell diagonal (0.433 m), because a cell only counts as free by its center, and the drone can be anywhere in that cell. That's 0.789 m in total. After that I can plan for a point: any point inside a free cell is at least 0.789 - 0.433 = 0.356 m from a real wall, which is exactly the drone's reach. The ground and the 20 m ceiling are kept the same distance away, so the lowest the drone plans is 1.25 m up.
+
+Where it lives: `city()`, `mark()` and `city_grid()` in `core/map.cpp`, the margins at the top of `core/map.h`.
+
+Interview questions:
+- Why plan on a grid instead of with the boxes themselves?
+- Why grow the obstacles, and by how much?
+- What does the cell size trade off?
+
+## A* and heuristics
+
+A* explores outward from the start, but it always expands the open cell with the lowest g + h next. g is the distance flown to reach that cell, and h is a guess at the distance left. Without h it's Dijkstra's algorithm, which spreads out evenly in every direction. With a good h it leans toward the goal and opens far fewer cells. A priority queue keeps the cheapest open cell on top.
+
+The guess has rules. Admissible means h never overestimates the distance left, and that's what guarantees the path A* returns is the shortest one. Consistent means h never drops by more than the cost of the step you just took, so a cell is never opened twice. The straight line distance to the goal is both, since nothing is shorter than a straight line. If h overestimates, A* gets faster but greedy, and it can miss the shortest path. I proved this one to myself: in my tests, multiplying h by 1.5 makes A* disagree with a plain Dijkstra search on random cluttered grids.
+
+Each cell touches 26 others: 6 through a face (0.5 m away), 12 through an edge (0.71 m) and 8 through a corner (0.87 m). Using the real length of each step keeps diagonal moves honest. With only 6 neighbors, paths turn into staircases up to 1.73 times too long. I also don't let a diagonal step squeeze past a blocked cell, because the drone would clip that cell's corner on the way through.
+
+Where it lives: `astar()` in `core/planner.cpp`.
+
+Interview questions:
+- What's the difference between A* and Dijkstra?
+- What makes a heuristic admissible, what makes it consistent, and what happens if it isn't?
+- Why 26 neighbors, and why ban cutting corners?
+
+## Smoothing the path
+
+A grid path is jagged. Across 200 seeded cities, the raw A* path was 10% longer than a straight line at the median and had 68 waypoints. Line of sight smoothing walks the path and keeps only the points it has to: from each kept point it jumps to the farthest point further down the path that it can reach in a straight line without touching a grown building. That brought the median down to 3 waypoints and 0.5% longer than a straight line.
+
+The check runs against the grown boxes themselves with a segment vs box slab test, not against the cells, so a shortcut can't slip between two blocked cells. The slab test treats the segment as a + t (b - a) for t from 0 to 1. For each axis it works out the range of t where the segment is between the box's two faces on that axis. If the three ranges overlap, the segment is inside the box for that stretch. The smoothed path isn't the true shortest path, but it's close. Any angle planners like Theta* get closer still.
+
+Where it lives: `smooth()` in `core/planner.cpp`, `segment_hits()` in `core/map.cpp`. The numbers are in `results/planning.md`.
+
+Interview questions:
+- Is the smoothed path optimal?
+- Why check shortcuts against the boxes and not the grid?
+- How does the slab test work?
+
+## Replanning and flying the path
+
+When a new obstacle shows up, I check whether any segment of the path still ahead now touches it (grown by the drone's reach). If one does, I mark the new box in the grid and run A* again from where the drone is. At this map size a full A* took 15 ms at the median in the native build on my PC, so plain replanning is enough. Incremental planners like D* Lite exist for when replanning from scratch is too slow, and I'd measure before reaching for one.
+
+Flying the path uses the ramped reference from phase 2. A setpoint slides along each leg, speeding up and slowing down at 3 m/s² with a 5 m/s cruise, and stops on every waypoint, with its velocity and acceleration fed forward. Stopping at each corner means the drone never has to make the instant 90 degree turn that cost about 5 m of error at 5 m/s. Smoothing is what makes that affordable: 3 stops instead of 68. The nose points along the current leg, and a straight up or down leg keeps the heading it had.
+
+Steep legs need one more rule. My controller caps vertical speed at 2 m/s, but a leg that drops 17 m over 20 m at 5 m/s asks for 4.2 m/s down. The drone couldn't keep up and fell 7.3 m behind the setpoint. Now a leg slows down whenever its up or down part would pass 1.5 m/s, which is 3/4 of the cap so the feedback still has room to catch up. Across 200 planned flights, the worst distance to the setpoint went from 7.34 m to 0.43 m. The lesson for me: a reference is only good if the controller can actually fly it, so it has to know the controller's limits.
+
+Where it lives: `path_blocked()` in `core/planner.cpp`, `follow()` and the climb limit in `core/route.cpp`, and `fly_to()` in `wasm/bindings.cpp`. Flight numbers are in `results/planning.md`.
+
+Interview questions:
+- When do you replan, and why not use D* Lite?
+- How do you turn a list of waypoints into something a flight controller can track?
+- Why did steep legs fall behind, and how did you fix it?

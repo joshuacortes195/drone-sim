@@ -1,3 +1,4 @@
+#include "route.h"
 #include "step_response.h"
 
 #include <chrono>
@@ -18,40 +19,6 @@ static double to_segment(Vec3 p, Vec3 a, Vec3 b) {
 struct RouteInfo {
   double rms_ref, max_ref, rms_cross, seconds;
 };
-
-// how far along a leg of length L the reference is after t seconds, how fast it's going and speeding up.
-// accel 0 means it jumps straight to cruise speed and turns corners instantly, otherwise it speeds up
-// and slows down at accel so it stops at each waypoint (a triangle if the leg is too short to reach cruise)
-static void along(double L, double cruise, double accel, double t, double& dist, double& speed, double& acc) {
-  acc = 0;
-  if (accel == 0) {
-    dist = cruise * t;
-    speed = cruise;
-    return;
-  }
-  double top = std::min(cruise, std::sqrt(accel * L));
-  double t_ramp = top / accel, t_total = L / top + t_ramp;
-  if (t < t_ramp) {
-    dist = accel * t * t / 2;
-    speed = accel * t;
-    acc = accel;
-  } else if (t < t_total - t_ramp) {
-    dist = top * t_ramp / 2 + top * (t - t_ramp);
-    speed = top;
-  } else {
-    double left = std::max(t_total - t, 0.0);
-    dist = L - accel * left * left / 2;
-    speed = accel * left;
-    acc = -accel;
-  }
-}
-
-// seconds the reference needs for a leg of length L
-static double leg_time(double L, double cruise, double accel) {
-  if (accel == 0) return L / cruise;
-  double top = std::min(cruise, std::sqrt(accel * L));
-  return L / top + top / accel;
-}
 
 // slides a reference point along the route and has the drone chase it, with the point's velocity and
 // acceleration fed forward, scoring distance to that point and to the route line every 1 ms step
