@@ -302,3 +302,13 @@ TEST_CASE("replan: a box dropped on the path is noticed, one off the path isn't,
   REQUIRE(!again.empty());
   CHECK(!path_blocked(again, grown(boxes, kReach)));
 }
+
+TEST_CASE("segment_hits: touching counts as a hit, lying on a face, a single point") {
+  Box b{{0, 0, 0}, {1, 1, 1}};
+  CHECK(segment_hits({-1, 0.5, 0.5}, {0, 0.5, 0.5}, b));     // ends right on a face
+  CHECK(segment_hits({-1, 0, 0.5}, {2, 0, 0.5}, b));         // slides along the y = 0 face
+  CHECK(!segment_hits({-1, -0.01, 0.5}, {2, -0.01, 0.5}, b)); // 1 cm outside that face
+  CHECK(segment_hits({0.5, 0.5, 0.5}, {0.5, 0.5, 0.5}, b));  // a point inside
+  CHECK(segment_hits({1, 0.5, 0.5}, {1, 0.5, 0.5}, b));      // a point on a face
+  CHECK(!segment_hits({1.5, 0.5, 0.5}, {1.5, 0.5, 0.5}, b)); // a point outside
+}

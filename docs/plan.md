@@ -118,16 +118,18 @@ Concepts first: fixed timestep and why rendering is decoupled from physics.
 - the reviewer found no bugs in the loop, bindings or frame math. Fixed after review: overclaimed CPU cost (now measured the way the page calls it), a wrong comment, determinism wording, the arrival check moved off `Math.hypot`, the first waypoint turning the drone to face south, a tiny negative backlog
 - result: `results/browser.md`, 60 fps (the display's rate) and a median 1000 steps per second over 30 s on my Intel Mac, 0.62 to 0.68 Âµs per step of pure wasm and 0.89 to 0.93 Âµs the way the page calls it, no console errors on a fresh load
 
-### Phase 4: planning (tdd)
+### Phase 4: planning (tdd, done 2026-10-16)
 
 Concepts first: occupancy grids, A*, heuristics, obstacle inflation, path smoothing, replanning.
 
-- `core/map.{h,cpp}`: seeded city map with every building below the 20 m ceiling, boxes to voxels. Boxes grow by the rotor arm (0.256 m from center to the farthest rotor) plus the 0.1 m rotor radius plus half a voxel diagonal before voxelizing
-- smoothed segments are checked against the grown boxes themselves, not only the voxels
-- `core/planner.{h,cpp}`: 26 neighbor A* with a straight line heuristic, line of sight smoothing, replanning when the path hits a newly occupied voxel
-- starting size: 60 Ã— 60 Ã— 20 m at 0.5 m voxels (120 Ã— 120 Ã— 40 cells). Adjusted if planning time is too long in the browser
-- tests: finds the optimal path on hand built grids, returns no path when the goal is walled off, smoothed path never cuts through a box, the same seed gives the same map
-- results: planning time and path length in `results/planning.md`
+- `core/map.{h,cpp}`: `city(seed)` puts one building (4 to 8 m on a side, 4 to 18 m tall) on each of 5 × 5 lots of 8 m on a 12 m grid with an 80% chance, home lot empty. Raw `mt19937` draws turned into numbers by hand, so native and wasm builds get the same city. `city_grid()` grows buildings by 0.789 m (0.256 m arm + 0.1 m rotor + 0.433 m half a cell diagonal), blocks every cell whose center is inside, and keeps the ground and ceiling 0.789 m away. 60 × 60 × 20 m at 0.5 m (120 × 120 × 40 cells). `segment_hits()` slab test
+- `core/planner.{h,cpp}`: 26 neighbor A* with the straight line heuristic and no corner cutting, `smooth()` line of sight against the grown boxes themselves, `path_blocked()` for replanning
+- `core/route.{h,cpp}`: the ramped reference moved out of `fly_route`, plus `follow()` that slides the setpoint along a path, stopping at each waypoint, with steep legs slowed so they never climb or sink faster than 1.5 m/s (3/4 of the controller's cap)
+- bindings and page: `new_city()`, `fly_to()` plans from where the drone is and starts following, the page draws the city and the path and loops over five goals. Wasm memory 64 MB
+- tests: city determinism and bounds, `mark()` on a hand placed box, grid margins, A* lengths on hand built grids plus a cross check against plain Dijkstra on random grids, walled off goals, smoothing safety on 30 seeded cities, the slab test edge cases, a box dropped on a path, and `follow()` timing, climb limit, heading and repeated points. Mutants caught: corner cutting, overestimating heuristic, equal step costs, no half diagonal, smoothing that ignores buildings, slab edge cases, no climb limit
+- what changed from the plan: replanning only exists as pieces (`path_blocked()`, `mark()` and a test). Running it while flying waits for the lidar in phase 5b. Also added the climb limit after the first flights fell up to 7.3 m behind on steep legs
+- the reviewer found no safety bugs. Fixed after review: a NaN on repeated path points, the heading resetting to east on a straight up first leg, the page searching again every frame if no goal could be reached, `reset()` leaving the old path running, a wrong reason for the corner cutting rule, replanning described as if it already ran, untested slab edge cases. Left for phase 5b: a blocked start cell makes A* return nothing
+- result: `results/planning.md` on my PC. 200 of 200 random trips planned, A* 15.5 ms median natively and 7.6 ms in wasm, smoothed paths 0.5% longer than a straight line at the median, worst tracking error 0.43 m, closest approach 0.68 m from the drone's center (reach 0.356 m), wasm and native paths identical
 
 ### Phase 5a: sensors and estimation (tdd)
 

@@ -80,7 +80,8 @@ static bool clear(Vec3 a, Vec3 b, const std::vector<Box>& boxes) {
 std::vector<Vec3> smooth(const std::vector<Vec3>& path, const std::vector<Box>& grown) {
   if (path.size() < 3) return path;
   // from each kept point, jump to the farthest point down the path it can see in a straight line.
-  // the very next point is always allowed, the cell path itself is already safe
+  // the very next point is always allowed since the cell path itself is already safe
+  // (with buildings bigger than a cell that fallback never actually gets used)
   std::vector<Vec3> out = {path[0]};
   size_t i = 0;
   while (i < path.size() - 1) {

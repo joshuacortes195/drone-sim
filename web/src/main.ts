@@ -87,10 +87,12 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'c') toggleCamera();
 });
 
-// plans a path from where the drone is to goal i and starts flying it, skipping goals it can't reach
+// plans a path from where the drone is to goal i and starts flying it, skipping goals it can't reach.
+// if none can be reached it gives up and holds, instead of searching again every frame
 let leg = 0;
 let planMs = 0;
 let pathEnd = [0, 0, 0];
+let stuck = false;
 function goTo(i: number) {
   for (let tries = 0; tries < GOALS.length; tries++, i = (i + 1) % GOALS.length) {
     const [x, y, z] = GOALS[i];
@@ -106,13 +108,14 @@ function goTo(i: number) {
     leg = i;
     return;
   }
+  stuck = true;
 }
 goTo(leg);
 
 // moves on to the next goal once the path is flown and the drone is close enough to its end
 // plain squared distance instead of Math.hypot, whose rounding can differ between browsers
 function updateMission() {
-  if (!sim._path_done()) return;
+  if (stuck || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
   if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
 }

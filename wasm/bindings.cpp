@@ -23,14 +23,15 @@ static const double DT = 0.001;
 static std::vector<Box> boxes, grown;
 static Grid grid(1, 1, 1);
 static std::vector<Vec3> path;
-static double path_t = 0;
+static double path_t = 0, path_yaw = 0;
 static bool following = false;
 
 // path speed: 5 m/s cruise with 3 m/s^2 ramps, stopping at each waypoint (the ramped route from results/control.md)
 static const double CRUISE = 5, ACCEL = 3;
 
-// buildings as lo x y z, hi x y z (6 numbers each) and the path as x y z, for the page to draw
-static double box_buf[6 * 32], path_buf[3 * 256];
+// buildings as lo x y z, hi x y z (6 numbers each) and the path as x y z, for the page to draw.
+// a city has at most 24 buildings, 5 x 5 lots minus home
+static double box_buf[6 * 24], path_buf[3 * 256];
 
 // the last two states packed as p, v, q (w x y z), body rates, rotor speeds, 17 numbers each
 // the page draws the drone part way between them
@@ -54,6 +55,7 @@ EMSCRIPTEN_KEEPALIVE void reset(double x, double y, double z, double yaw) {
   s.rotor = {w, w, w, w};
   c = Controller{};
   sp = Setpoint{};
+  following = false;
   sp.pos = s.p;
   sp.yaw = yaw;
   prev = s;
@@ -76,7 +78,7 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
     // when flying a path, the setpoint slides along it
     if (following) {
       path_t += DT;
-      sp = follow(path, path_t, CRUISE, ACCEL);
+      sp = follow(path, path_t, CRUISE, ACCEL, path_yaw);
     }
     prev = s;
     s = step(P, s, control(c, P, s, sp, DT), DT);
@@ -100,13 +102,13 @@ EMSCRIPTEN_KEEPALIVE int new_city(unsigned seed) {
   boxes = city(seed);
   grid = city_grid(boxes);
   grown.clear();
-  for (size_t i = 0; i < boxes.size() && i < 32; i++) {
+  for (size_t i = 0; i < boxes.size(); i++) {
     const Box& b = boxes[i];
     const double v[6] = {b.lo.x, b.lo.y, b.lo.z, b.hi.x, b.hi.y, b.hi.z};
     for (int k = 0; k < 6; k++) box_buf[6 * i + k] = v[k];
     grown.push_back(grow(b, kMargin));
   }
-  return int(boxes.size() < 32 ? boxes.size() : 32);
+  return int(boxes.size());
 }
 EMSCRIPTEN_KEEPALIVE double* boxes_ptr() { return box_buf; }
 
@@ -120,6 +122,9 @@ EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
     path_buf[3 * i + 1] = path[i].y;
     path_buf[3 * i + 2] = path[i].z;
   }
+  // keep facing the way the drone faces now until the path moves sideways
+  Vec3 nose = rotate(s.q, {1, 0, 0});
+  path_yaw = std::atan2(nose.y, nose.x);
   path_t = 0;
   following = !path.empty();
   return int(path.size());

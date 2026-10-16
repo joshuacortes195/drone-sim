@@ -57,3 +57,21 @@ TEST_CASE("follow: a steep leg slows down so it never asks for more than 1.5 m/s
   CHECK(norm(follow(path, T - 0.001, 5, 3).pos - path[1]) < 0.01);
   CHECK(norm(follow(path, T * 0.9, 5, 3).pos - path[1]) > 0.1);
 }
+
+TEST_CASE("follow: a repeated point is skipped instead of breaking the timing") {
+  std::vector<Vec3> path = {{0, 0, 2}, {0, 0, 2}, {5, 0, 2}};
+  std::vector<Vec3> clean = {{0, 0, 2}, {5, 0, 2}};
+  CHECK(path_time(path, 5, 3) == doctest::Approx(path_time(clean, 5, 3)));
+  CHECK(follow(path, 0.5, 5, 3).pos.x == doctest::Approx(follow(clean, 0.5, 5, 3).pos.x));
+}
+
+TEST_CASE("follow: keeps the heading it started with until a leg moves sideways") {
+  // straight up first, then east: faces the starting 2 rad on the way up, then turns east
+  std::vector<Vec3> path = {{0, 0, 2}, {0, 0, 6}, {5, 0, 6}};
+  CHECK(follow(path, 0.5, 5, 3, 2.0).yaw == doctest::Approx(2.0));
+  CHECK(follow(path, path_time(path, 5, 3) - 0.5, 5, 3, 2.0).yaw == doctest::Approx(0));
+  // a path that's just one point holds there, facing the same way
+  Setpoint one = follow({{1, 2, 3}}, 1, 5, 3, -1.0);
+  CHECK(norm(one.pos - Vec3{1, 2, 3}) < 1e-12);
+  CHECK(one.yaw == doctest::Approx(-1.0));
+}

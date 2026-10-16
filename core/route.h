@@ -16,5 +16,6 @@ void along(double L, double cruise, double accel, double t, double& dist, double
 double path_time(const std::vector<Vec3>& path, double cruise, double accel);
 
 // where the drone should be t seconds after starting down the path, with the path's velocity and
-// acceleration fed forward and the nose pointed along the current leg. holds the last point once done
-Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel);
+// acceleration fed forward and the nose pointed along the current leg. holds the last point once done.
+// yaw is the heading to keep until the first leg that moves sideways
+Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel, double yaw = 0);

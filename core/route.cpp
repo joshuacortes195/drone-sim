@@ -52,23 +52,25 @@ double path_time(const std::vector<Vec3>& path, double cruise, double accel) {
   double T = 0;
   for (size_t i = 1; i < path.size(); i++) {
     Vec3 d = path[i] - path[i - 1];
-    T += leg_time(norm(d), leg_cruise(d, cruise), accel);
+    if (norm(d) > 0) T += leg_time(norm(d), leg_cruise(d, cruise), accel);  // a repeated point takes no time
   }
   return T;
 }
 
-Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel) {
+Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel, double yaw) {
   Setpoint sp;
+  sp.yaw = yaw;
   if (path.empty()) return sp;
   sp.pos = path.back();
   for (size_t i = 1; i < path.size(); i++) {
     Vec3 d = path[i] - path[i - 1];
     double L = norm(d);
+    if (L == 0) continue;  // a repeated point takes no time
     // nose along this leg, a straight up or down leg keeps the heading it already had
     if (std::hypot(d.x, d.y) > 1e-6) sp.yaw = std::atan2(d.y, d.x);
     double v = leg_cruise(d, cruise);
     double T = leg_time(L, v, accel);
-    if (t < T && L > 0) {
+    if (t < T) {
       // somewhere on this leg: slide along its direction
       double dist, speed, acc;
       along(L, v, accel, t, dist, speed, acc);

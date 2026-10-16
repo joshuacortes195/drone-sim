@@ -62,6 +62,8 @@ The same 200 queries, planned by the wasm build in Chrome (`fly_to()`, which is 
 
 The closest any flight got was 0.680 m from the drone's center to a building or the ground. The drone reaches 0.356 m from its center, so the tightest pass still left 0.32 m of air. 0 flights touched anything.
 
+Each flight starts hovering, already settled, on the first cell center. In the page the drone starts a plan from wherever it is, which can be up to 0.43 m from that cell center, so the first moments of a real flight aren't covered here.
+
 The column that matters for safety is the smallest one, which is why the 0.680 m is listed on its own. The "worst" column there is the flight that stayed farthest away.
 
 ### Before the climb limit
@@ -83,5 +85,5 @@ The page flies seed 1 through five street crossings at 3 to 12 m up, planning ea
 - 1000 physics steps per second (999 to 1001 in every half second window)
 - 180 fps in a normal Chrome window. I think that's my monitor's refresh rate but I haven't checked its setting
 - the readout sampled every 2.5 s showed the drone at about the same height at the same times in both runs (9.9 m at 62 s in both, 7.3 m and 7.2 m at 59.5 s). The samples don't land on the same physics step, so this only shows the flights are close, not identical
-- wasm file 38.1 kB (19.2 kB gzipped), up from 19.9 kB with the planner and city added
+- wasm file 38.3 kB (19.3 kB gzipped), up from 19.9 kB with the planner and city added
 - wasm memory raised from 16 MB to 64 MB so A* has room on the full grid
