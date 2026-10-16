@@ -16,6 +16,14 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+On Windows I build with the Visual Studio 2022 Build Tools. From an "x64 Native Tools Command Prompt" (or after running `vcvars64.bat`), the same commands work with Ninja, and the programs end in `.exe`:
+
+```bat
+cmake -S . -B build -G Ninja
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
 To print the physics numbers in [results/physics.md](results/physics.md) (free fall error, RK4 vs Euler drift, cost per step):
 
 ```bash
@@ -52,5 +60,7 @@ To rebuild the wasm after changing the C++ (needs [Emscripten](https://emscripte
 emcmake cmake -S . -B build-wasm
 cmake --build build-wasm
 ```
+
+On Windows add `-G Ninja` to the first line.
 
 That writes `web/src/wasm/drone.js` and `drone.wasm`.
