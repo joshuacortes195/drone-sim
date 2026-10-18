@@ -19,14 +19,14 @@ else()
 endif()
 
 # the drone physics, shared by the tests, tools and later the browser build
-add_library(core core/quad.cpp core/controller.cpp core/map.cpp core/planner.cpp core/route.cpp)
+add_library(core core/quad.cpp core/controller.cpp core/map.cpp core/planner.cpp core/route.cpp core/sensors.cpp)
 target_include_directories(core PUBLIC core)
 target_compile_options(core PRIVATE ${WARN_FLAGS})
 
 # native test runner, skipped when building for the browser
 if(NOT EMSCRIPTEN)
   enable_testing()
-  add_executable(tests tests/test_main.cpp tests/test_quad.cpp tests/test_controller.cpp tests/test_planning.cpp tests/test_route.cpp)
+  add_executable(tests tests/test_main.cpp tests/test_quad.cpp tests/test_controller.cpp tests/test_planning.cpp tests/test_route.cpp tests/test_sensors.cpp)
   target_include_directories(tests SYSTEM PRIVATE third_party/doctest)
   target_include_directories(tests PRIVATE tools)
   target_compile_options(tests PRIVATE ${WARN_FLAGS})
