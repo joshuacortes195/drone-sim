@@ -60,3 +60,10 @@ double read_mag(Sensors& sn, const QuadState& s) {
   double h = heading(s.q) + sn.n.mag * gauss(sn.rng);
   return std::atan2(std::sin(h), std::cos(h));
 }
+
+Noise rtk() {
+  Noise n;
+  n.gps_xy = 0.0093;  // 0.011 m cep50 / 1.1774
+  n.gps_z = 0.0163;   // 0.011 m median / 0.6745
+  return n;
+}

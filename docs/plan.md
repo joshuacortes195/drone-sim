@@ -122,7 +122,7 @@ Concepts first: fixed timestep and why rendering is decoupled from physics.
 
 Concepts first: occupancy grids, A*, heuristics, obstacle inflation, path smoothing, replanning.
 
-- `core/map.{h,cpp}`: `city(seed)` puts one building (4 to 8 m on a side, 4 to 18 m tall) on each of 5 × 5 lots of 8 m on a 12 m grid with an 80% chance, home lot empty. Raw `mt19937` draws turned into numbers by hand, so native and wasm builds get the same city. `city_grid()` grows buildings by 0.789 m (0.256 m arm + 0.1 m rotor + 0.433 m half a cell diagonal), blocks every cell whose center is inside, and keeps the ground and ceiling 0.789 m away. 60 × 60 × 20 m at 0.5 m (120 × 120 × 40 cells). `segment_hits()` slab test
+- `core/map.{h,cpp}`: `city(seed)` puts one building (4 to 8 m on a side, 4 to 18 m tall) on each of 5 Ã— 5 lots of 8 m on a 12 m grid with an 80% chance, home lot empty. Raw `mt19937` draws turned into numbers by hand, so native and wasm builds get the same city. `city_grid()` grows buildings by 0.789 m (0.256 m arm + 0.1 m rotor + 0.433 m half a cell diagonal), blocks every cell whose center is inside, and keeps the ground and ceiling 0.789 m away. 60 Ã— 60 Ã— 20 m at 0.5 m (120 Ã— 120 Ã— 40 cells). `segment_hits()` slab test
 - `core/planner.{h,cpp}`: 26 neighbor A* with the straight line heuristic and no corner cutting, `smooth()` line of sight against the grown boxes themselves, `path_blocked()` for replanning
 - `core/route.{h,cpp}`: the ramped reference moved out of `fly_route`, plus `follow()` that slides the setpoint along a path, stopping at each waypoint, with steep legs slowed so they never climb or sink faster than 1.5 m/s (3/4 of the controller's cap)
 - bindings and page: `new_city()`, `fly_to()` plans from where the drone is and starts following, the page draws the city and the path and loops over five goals. Wasm memory 64 MB
@@ -131,15 +131,17 @@ Concepts first: occupancy grids, A*, heuristics, obstacle inflation, path smooth
 - the reviewer found no safety bugs. Fixed after review: a NaN on repeated path points, the heading resetting to east on a straight up first leg, the page searching again every frame if no goal could be reached, `reset()` leaving the old path running, a wrong reason for the corner cutting rule, replanning described as if it already ran, untested slab edge cases. Left for phase 5b: a blocked start cell makes A* return nothing
 - result: `results/planning.md` on my PC. 200 of 200 random trips planned, A* 15.5 ms median natively and 7.6 ms in wasm, smoothed paths 0.5% longer than a straight line at the median, worst tracking error 0.43 m, closest approach 0.68 m from the drone's center (reach 0.356 m), wasm and native paths identical
 
-### Phase 5a: sensors and estimation (tdd)
+### Phase 5a: sensors and estimation (tdd, done 2026-10-18)
 
 Concepts first: sensor noise and bias, the Kalman filter, complementary filter, why an accelerometer can't see tilt in flight.
 
-- `core/sensors.{h,cpp}`: IMU (accelerometer and gyro) with white noise and bias random walk, GPS with noise at 10 Hz, a noisy magnetometer for heading. Noise levels taken from real part datasheets, cited in the plan when chosen
-- `core/estimator.{h,cpp}`: Kalman filter on position, velocity and accelerometer bias (9 states). The rotation from the attitude estimate is treated as known each step, so it stays a linear (time varying) KF. Attitude from a complementary filter: gyro integration, a low gain tilt correction from the accelerometer and heading from the magnetometer. Without the magnetometer, yaw would drift forever with gyro bias
-- the accelerometer measures thrust and rotor drag, not gravity, so in fast flight its x and y readings mostly show rotor drag (Martin and SalaÃ¼n 2010). The tilt correction is kept weak for that reason
-- tests: with zero noise the estimate matches truth in hover, and stays within a set tolerance while maneuvering. The KF position error is lower than raw GPS error. A constant accelerometer bias is learned. Yaw doesn't drift with gyro bias on
-- results: estimation RMS error with and without the filter in `results/estimation.md`
+- `core/sensors.{h,cpp}`: IMU (accelerometer and gyro) with white noise, turn on biases and a bias random walk, GPS at 10 Hz, a magnetometer that gives a noisy heading. Bell curve noise drawn by hand from raw `mt19937` draws so native and wasm match. `Noise{}` is a NEO-M8N setup, `rtk()` swaps in a ZED-F9P RTK GPS, `quiet()` turns everything off
+- noise levels, all in `results/estimation.md` with their tables: Bosch BMI088 (data sheet BST-BMI088-DS000-19 Rev 1.9) for the IMU, u-blox NEO-M8N (UBX-15031086 R14) and ZED-F9P (UBX-21044850 R05) for GPS, iSentek IST8310 (v1.5) for the magnetometer. Not in the data sheets, and labeled where used: the bias random walk (RotorS IMU defaults) and the NEO-M8N's vertical error (PX4 SITL, twice the horizontal)
+- `core/estimator.{h,cpp}`: Kalman filter on position, velocity and accelerometer bias (9 states), with the rotation from the attitude estimate treated as known so it stays linear. Attitude from a PI (Mahony) complementary filter: gyro integration, a weak tilt pull from the raw accelerometer that's only trusted within 3% of 1 g, heading from the magnetometer, and both learn the gyro bias. The gyro is calibrated for 1 s on the pad
+- tests: perfect sensors track the truth through a maneuver (2 cm, 5 mrad), the Kalman filter beats raw GPS by more than 3x with real noise, an up and down accel bias is learned, a 1 deg/s yaw gyro bias is learned and yaw doesn't drift, a wrong tilt comes back toward level. Six mutants caught
+- what changed from the plan: the tilt pull reads the raw accelerometer (otherwise the Kalman filter soaks a tilt error up as fake bias), Q is set above the data sheet to cover model error, and a sideways accel bias turned out impossible to separate from tilt in hover, so only the up and down bias is tested as learned. Flying the planned paths on the NEO-M8N estimate put 51 of 200 flights within the drone's reach of a building, so RTK became the default
+- result: `results/estimation.md` on my PC. With the NEO-M8N the estimate is 1.08 m RMS off at the median vs 5.15 m for raw GPS. With RTK it's 0.011 m, and all 200 flights are as safe as flying on the truth (closest 0.679 m vs 0.680 m)
+- the browser still flies on the true state. The ghost drone and the estimate in the page come with phase 5b
 
 ### Phase 5b: lidar and replanning (tdd)
 

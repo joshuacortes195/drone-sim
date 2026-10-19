@@ -43,3 +43,7 @@ Vec3 read_gps(Sensors& sn, const QuadState& s);
 
 // a noisy heading from the magnetometer, radians from east toward north
 double read_mag(Sensors& sn, const QuadState& s);
+
+// the same imu and magnetometer with an rtk gps instead (u-blox zed-f9p): 0.01 m + 1 ppm cep horizontal
+// and median vertical on a 1 km baseline, 10 Hz with gps + glonass + galileo
+Noise rtk();
