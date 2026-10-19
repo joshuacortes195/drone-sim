@@ -122,3 +122,38 @@ TEST_CASE("biases wander as a random walk, spread grows with the square root of 
   CHECK(within(stddev(ab), 0.012, 0.1));
   CHECK(within(stddev(gb), 7.76e-5, 0.1));
 }
+
+TEST_CASE("gps spreads 2.12 m across and 4.24 m up and down around the true position, centered on it") {
+  Sensors sn = make_sensors(Noise{}, 11);
+  QuadState s;
+  s.p = {3, -4, 10};
+  std::vector<double> x, z;
+  double mean_x = 0;
+  for (int i = 0; i < 20000; i++) {
+    Vec3 g = read_gps(sn, s);
+    x.push_back(g.x);
+    z.push_back(g.z);
+    mean_x += g.x / 20000;
+  }
+  CHECK(within(stddev(x), 2.12, 0.03));
+  CHECK(within(stddev(z), 4.24, 0.03));
+  CHECK(std::abs(mean_x - 3) < 0.05);
+}
+
+TEST_CASE("magnetometer reads the true heading with 0.015 rad of noise, even tilted") {
+  Sensors sn = make_sensors(Noise{}, 12);
+  QuadState s;
+  // facing 2 rad, then rolled 0.4 rad, which mustn't change the heading
+  s.q = axis_angle({0, 0, 1}, 2.0) * axis_angle({1, 0, 0}, 0.4);
+  std::vector<double> h;
+  for (int i = 0; i < 20000; i++) h.push_back(read_mag(sn, s));
+  CHECK(within(stddev(h), 0.015, 0.03));
+  double mean = 0;
+  for (double v : h) mean += v / h.size();
+  CHECK(std::abs(mean - 2.0) < 1e-3);
+
+  // a perfect one facing just past south (-pi) stays wrapped to -pi..pi
+  Sensors p = perfect();
+  s.q = axis_angle({0, 0, 1}, -3.1);
+  CHECK(read_mag(p, s) == doctest::Approx(-3.1));
+}

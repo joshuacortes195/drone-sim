@@ -57,3 +57,8 @@ inline Vec3 rotate(Quat q, Vec3 v) {
   Quat r = q * Quat{0, v.x, v.y, v.z} * conj(q);
   return {r.x, r.y, r.z};
 }
+
+// which way the nose points on the map, radians from east toward north (the z in a z-y-x turn)
+inline double heading(Quat q) {
+  return std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+}

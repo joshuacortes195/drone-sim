@@ -50,6 +50,13 @@ Imu read_imu(Sensors& sn, const QuadParams& P, const QuadState& s, double dt) {
   return {accel, gyro};
 }
 
-Vec3 read_gps(Sensors&, const QuadState& s) { return s.p; }
+Vec3 read_gps(Sensors& sn, const QuadState& s) {
+  // fresh noise each fix, worse up and down than across
+  return s.p + gauss3(sn.rng, {sn.n.gps_xy, sn.n.gps_xy, sn.n.gps_z});
+}
 
-double read_mag(Sensors&, const QuadState&) { return 0; }
+double read_mag(Sensors& sn, const QuadState& s) {
+  // the true heading plus noise, kept in -pi..pi
+  double h = heading(s.q) + sn.n.mag * gauss(sn.rng);
+  return std::atan2(std::sin(h), std::cos(h));
+}
