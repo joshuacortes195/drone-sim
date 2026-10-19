@@ -129,6 +129,8 @@ int main() {
   // lidar on
   int on_inside = 0, on_close = 0, on_goal = 0, on_stuck = 0, never_replanned = 0;
   std::vector<double> off_dropped, on_dropped, on_clear, seen_at, replans, scan_ms, replan_ms, on_end;
+  // which seed each lidar flight was, and the ones where a replan found no path
+  std::vector<uint32_t> on_seed, stuck_seeds;
 
   for (uint32_t seed = 0; seed < seeds; seed++) {
     // the same city, start and goal per seed as plan_report
@@ -172,11 +174,15 @@ int main() {
     Flight on = fly(path, b, boxes, dropped, true, seed + 5000);
     on_dropped.push_back(on.to_dropped);
     on_clear.push_back(on.clearance);
+    on_seed.push_back(seed);
     on_end.push_back(on.end_error);
     if (on.clearance == 0) on_inside++;
     if (on.clearance < kReach) on_close++;
     if (on.end_error < 1) on_goal++;
-    if (on.stuck) on_stuck++;
+    if (on.stuck) {
+      on_stuck++;
+      stuck_seeds.push_back(seed);
+    }
     if (on.seen_at >= 0) seen_at.push_back(on.seen_at);
     else never_replanned++;
     replans.push_back(on.replans);
@@ -193,9 +199,12 @@ int main() {
   std::printf("\nlidar on: center inside anything %d, within reach of anything %d, ended within 1 m of the goal %d,\n",
               on_inside, on_close, on_goal);
   std::printf("  a replan found no path %d, never replanned %d\n", on_stuck, never_replanned);
+  // the seeds that got stuck, so they can be looked at one by one
+  for (uint32_t s : stuck_seeds) std::printf("  no path on seed %u\n", unsigned(s));
   summary("closest to the cube (m)", on_dropped);
   summary("closest to anything (m)", on_clear);
-  std::printf("%-34s %.3f m\n", "closest any flight got", *std::min_element(on_clear.begin(), on_clear.end()));
+  size_t worst = size_t(std::min_element(on_clear.begin(), on_clear.end()) - on_clear.begin());
+  std::printf("%-34s %.3f m (seed %u)\n", "closest any flight got", on_clear[worst], unsigned(on_seed[worst]));
   summary("off the goal at the end (m)", on_end);
   summary("distance to cube at first replan (m)", seen_at);
   summary("replans per flight", replans);

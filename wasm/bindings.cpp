@@ -80,8 +80,8 @@ static void lidar_turn() {
   }
   size_t known = grown.size();
   if (add_hits(grid, grown, hits, boxes, e.p) && following && replan(path, grid, grown, known, e.p, goal)) {
-    // no way through, or a path too long to draw: hold where it thinks it is
-    if (path.empty()) path = {e.p};
+    // no way through, or a path too long to draw: hold where it thinks it is.
+    // the hold is one point, so nothing can cut it and it won't replan again on its own
     publish_path();
     if (path.empty()) {
       path = {e.p};
@@ -222,6 +222,9 @@ EMSCRIPTEN_KEEPALIVE double* path_ptr() { return path_buf; }
 // the path after a replan: how many waypoints, and how many replans so far so the page knows to redraw
 EMSCRIPTEN_KEEPALIVE int path_len() { return int(path.size()); }
 EMSCRIPTEN_KEEPALIVE int replan_count() { return replans; }
+
+// physics steps since reset, so the page times its plot and lidar dots off the same clock as the sensors
+EMSCRIPTEN_KEEPALIVE double sim_tick() { return double(tick); }
 
 // the estimate in the same 17 number layout as the state, now and one step back
 EMSCRIPTEN_KEEPALIVE double* est_now() { return est_buf; }

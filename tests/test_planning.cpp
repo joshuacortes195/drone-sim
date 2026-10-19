@@ -228,6 +228,15 @@ TEST_CASE("astar: a blocked start plans from the nearest free cell, but not from
   CHECK(!g.blocked(g.ix(path[0].x), g.iy(path[0].y), g.iz(path[0].z)));
   CHECK(std::abs(norm(path[0] - g.center(5, 5, 5)) - 1.0) < 1e-9);
 
+  // 4 cells out (2 m) is the farthest it still looks
+  Grid four = open_grid(20, 20, 20);
+  for (int i = 7; i <= 13; i++)
+    for (int j = 7; j <= 13; j++)
+      for (int k = 7; k <= 13; k++) four.block(i, j, k);
+  auto out = astar(four, four.center(10, 10, 10), four.center(0, 0, 0));
+  REQUIRE(!out.empty());
+  CHECK(std::abs(norm(out[0] - four.center(10, 10, 10)) - 2.0) < 1e-9);
+
   // the closest free cell is 5 cells out, one past the 4 it looks, so no path
   Grid deep = open_grid(20, 20, 20);
   for (int i = 6; i <= 14; i++)

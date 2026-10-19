@@ -40,10 +40,12 @@
     <div class="panel">
       <canvas id="plot" role="img" aria-label="estimate error plot, waiting for data"></canvas>
       <div class="key">
-        <span><i style="background:#4a6fe3"></i>estimate (ghost)</span>
-        <span><i class="dot" style="background:#d6336c"></i>lidar hits</span>
-        <span><i style="background:#2a9d8f;height:2px;vertical-align:3px"></i>path</span>
+        <span><i style="background:#4a6fe3"></i>blue ghost: where it thinks it is</span>
+        <span><i class="dot" style="background:#d6336c"></i>what its lidar sees</span>
+        <span><i style="background:#2a9d8f;height:2px;vertical-align:3px"></i>its planned path</span>
+        <span><i class="dot" style="background:#2a9d8f;width:8px;height:8px"></i>goal</span>
         <span><i class="box"></i>box it wasn't told about</span>
+        <span><i style="background:#ff8a2a"></i>orange: the drone's front</span>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

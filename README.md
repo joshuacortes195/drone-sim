@@ -52,7 +52,7 @@ npm install
 npm run dev
 ```
 
-The drone flies a loop of planned paths through a seeded city, with the planned path drawn in teal. The blue ghost is where the drone thinks it is, the magenta dots are the last lidar turn, and the outlined cube on the first leg is one it wasn't told about. The plot in the corner is how far the estimate is from the real drone. Press `c` or the button to switch between the chase camera and the map view. Frame rate and physics numbers are in [results/browser.md](results/browser.md).
+The drone flies a loop of planned paths through a seeded city, with the planned path drawn in teal. The blue ghost is where the drone thinks it is, the magenta dots are the last lidar turn, and the outlined cube is one it wasn't told about. It drops onto the first leg once the drone is moving, so you can watch the lidar find it and the path get redrawn (the old path stays faded for 2 s). The plot in the corner is how far the estimate is from the real drone, averaged over each 0.1 s. Press `c` or the button to switch between the chase camera and the map view. Frame rate and physics numbers are in [results/browser.md](results/browser.md).
 
 To rebuild the wasm after changing the C++ (needs [Emscripten](https://emscripten.org)):
 

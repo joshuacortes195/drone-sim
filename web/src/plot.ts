@@ -1,4 +1,4 @@
-// live plot of how far the estimate is from the real drone, the last 30 s at 10 samples a second
+// live plot of how far the estimate is from the real drone, the last 30 s at 10 samples a second (each one a 0.1 s average)
 const SAMPLES = 300;
 const SAMPLE_S = 0.1;
 
@@ -56,7 +56,8 @@ export function buildPlot(canvas: HTMLCanvasElement) {
     ctx.font = '12px ui-monospace, Menlo, monospace';
     ctx.fillStyle = INK;
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText('estimate off by (cm)', left, 13);
+    ctx.textAlign = 'left';
+    ctx.fillText('gap to where it thinks it is (cm)', left, 13);
 
     // three faint grid lines with their values on the left
     ctx.font = '10px ui-monospace, Menlo, monospace';
@@ -97,7 +98,7 @@ export function buildPlot(canvas: HTMLCanvasElement) {
     ctx.textBaseline = 'middle';
     ctx.font = '11px ui-monospace, Menlo, monospace';
     ctx.fillText(last.toFixed(1), right + 6, Math.min(bottom, Math.max(top, y(last))));
-    canvas.setAttribute('aria-label', `estimate off by ${last.toFixed(1)} cm`);
+    canvas.setAttribute('aria-label', `where it thinks it is is ${last.toFixed(1)} cm off`);
 
     // hover: a line at the nearest sample with its value and how long ago it was
     if (hoverX !== null && hoverX >= left && hoverX <= right) {

@@ -1,6 +1,6 @@
 # Lidar and replanning results (phase 5b, core)
 
-Measured 2026-10-18 on my PC with `tools/lidar_report.cpp` and the lidar tests.
+Measured 2026-10-18 on my PC with `tools/lidar_report.cpp` and the lidar tests, rerun 2026-10-19 after the review fixes.
 
 ## How
 
@@ -34,24 +34,24 @@ Only boxes reflect. The ground and ceiling are known and never scanned.
 |---|---|---|
 | flights with the center inside something | 200 (all inside the cube) | 0 |
 | flights within the drone's reach of something | 200 | 1 |
-| closest to anything, median / p95 / worst over flights | 0 / 0 / 0 m | 1.140 / 1.694 / 1.795 m (worst flight 0.112 m) |
+| closest to anything, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.132 / 1.669 / 1.826 m (worst flight 0.071 m) |
 | ended within 1 m of the goal | | 200 |
-| off the goal at the end, median / p95 / max | | 0.070 / 0.110 / 0.153 m |
+| off the goal at the end, median / p95 / max | | 0.069 / 0.106 / 0.208 m |
 
 With the lidar on:
 
 | | median | p95 | max | n |
 |---|---|---|---|---|
 | distance to the cube at the first replan (m) | 15.0 | 27.1 | 37.7 | 200 |
-| replans per flight | 2 | 5 | 7 | 200 |
-| `scan()` + `add_hits()` per turn (ms) | 0.752 | 1.180 | 3.233 | 33,655 |
-| `replan()`, cut check + `astar()` + `smooth()` (ms) | 11.0 | 42.7 | 145.3 | 543 |
+| replans per flight | 3 | 6 | 8 | 200 |
+| `scan()` + `add_hits()` per turn (ms) | 0.707 | 1.071 | 1.744 | 33,772 |
+| `replan()`, cut check + `astar()` + `smooth()` (ms) | 9.9 | 41.4 | 142.8 | 578 |
 
-Timings are from the rerun after the replan rule moved into `core/lidar.cpp` (same day). Every count and distance came out identical to the first run, only the timings moved, which they also do between runs of the same build. The first run had 0.726 ms and 10.4 / 136.7 ms.
+These are from the 2026-10-19 rerun after a replan started from exactly where the drone thinks it is instead of the center of its cell (see the last row of the table below). Timings move between runs of the same build too: the run just before this one, same code, had a worst `scan()` + `add_hits()` of 3.238 ms and a worst replan of 157.9 ms. With a browser running alongside, a worst replan of 411 ms natively and 164 ms in wasm was seen during the review, so the worst case depends a lot on what else the machine is doing.
 
-Every flight replanned at least once. One replan found no path (seed 47, the drone held for a turn, then a later replan got through), and that flight still reached its goal.
+Every flight replanned at least once. One replan found no path, on seed 47. When that happens the drone holds where it thinks it is. The hold is a single point, so nothing can cut it and it never tries to replan again. Seed 47's failed replan came near the end, about 0.1 m from the goal (traced on the build before this rerun), so it held there and still ended within 1 m of the goal.
 
-The one close call is seed 163: 0.112 m from the cube, center never inside. Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. Its first replan came 0.68 m from the cube at 1.79 m/s. That's a limit of this sensor on steep legs, not a bug, and it's still open.
+The one close call is seed 163: 0.071 m from the cube, center never inside. Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. On the run before this one its first replan came 0.68 m from the cube at 1.79 m/s and it got within 0.112 m. That's a limit of this sensor on steep legs, not a bug, and it's still open.
 
 ## What changed while measuring
 
@@ -61,15 +61,18 @@ Each row is one full run of the 200 trips with the lidar on.
 |---|---|---|---|---|---|
 | a hit is skipped if its cell is already blocked | 2 | 14 | 200 | 0 | 0.000 m |
 | one box per cell with a hit, known buildings matched within 0.1 m | 0 | 1 | 196 | 20 | 0.112 m |
-| known buildings matched within 0.1 m + 0.03 per meter of range (kept) | 0 | 1 | 200 | 1 | 0.112 m |
+| known buildings matched within 0.1 m + 0.03 per meter of range | 0 | 1 | 200 | 1 | 0.112 m |
+| a replan starts right where the drone thinks it is, not its cell center (kept) | 0 | 1 | 200 | 1 | 0.071 m |
 
 - First version: all 14 close calls were the cube. A hit was skipped when its cell was already blocked, but a cell is often blocked only because it's inside the margin of a neighboring hit. Those skipped hits never became boxes, and `smooth()` and the replan check only look at the box list. So the cube's sides, seen after its front, never cut the path. Seed 127 replanned once on the pad, then flew within 1 cm of the cube without replanning again. A test now scans a cube from the front, then from its side, and checks that every spot near the side is inside a box
 - Second version: all 20 failed replans had the goal cell blocked by fake obstacles, up to 2,015 hit boxes on one flight when a 2 m cube makes about a hundred. They were hits on known buildings placed more than 0.1 m off the wall by the estimate's attitude error. I measured that error at every lidar turn of that run (about 30,000 turns, with a temporary build): median 4.6 mrad, p95 13.0 mrad, p99 17.6 mrad, worst 26.6 mrad. At 30 m the worst case moves a hit 0.8 m. So the known building tolerance now grows with range, with 0.03 rad picked just over that worst case
+- Last version (from the review): `astar()` gives back cell centers, so a replan used to start the new path at the center of the drone's cell, up to 0.43 m away, and the setpoint jumped there along a segment nothing checked. Now the first point is where the drone thinks it is (any point in a free cell is clear by the margin), and smoothing checks the first segment like any other. The worst flight is still seed 163, now 0.071 m instead of 0.112 m, and flights replan a bit more often (median 3 instead of 2). I haven't looked into why yet
 
 ## Limits
 
 - the whole turn is taken in one instant. A real VLP-16 sweeps over 0.1 s while the drone moves up to 0.5 m
 - the lidar only adds obstacles, it never clears them. Nothing here moves, so that's fine for now
-- the planner treats space it hasn't seen as free. Going around a box's front corner, the new path can cut behind it, and the side only shows up once the drone gets past the front. That's why most flights replan 2 to 5 times
+- the planner treats space it hasn't seen as free. Going around a box's front corner, the new path can cut behind it, and the side only shows up once the drone gets past the front. That's why most flights replan 2 to 6 times
 - each replan starts the new path from rest, so the drone brakes hard even when the new path heads the same way
-- the worst replan (145 ms) runs inside one physics step natively. In the page it would hold up a frame
+- the worst replan (143 ms here, more when the machine is busy) runs inside one physics step natively. In the page it would hold up a frame
+- a drone holding after a failed replan never tries again on its own

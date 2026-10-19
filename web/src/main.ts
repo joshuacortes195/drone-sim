@@ -6,6 +6,7 @@ import {
   buildGhost,
   buildHits,
   buildMapArrow,
+  buildOldPath,
   buildPath,
   buildShadow,
   buildTarget,
@@ -67,7 +68,8 @@ const target = buildTarget();
 const arrow = buildMapArrow();
 const ghost = buildGhost(sim);
 const hits = buildHits(MAX_HITS);
-scene.add(drone, ghost, hits, shadow, target, arrow, pathLine);
+const oldPath = buildOldPath();
+scene.add(drone, ghost, hits, shadow, target, arrow, pathLine, oldPath);
 
 // the live error plot under the readout
 const plot = buildPlot(document.getElementById('plot') as HTMLCanvasElement);
@@ -79,7 +81,7 @@ top.up.set(0, 1, 0);
 let camera: THREE.Camera = chase;
 chase.position.set(-3, 0, 2);
 
-// meters of ground the map view shows top to bottom
+// meters of ground the map view shows across its narrower side, so a phone held upright sees as much as a wide screen
 const TOP_VIEW_M = 60;
 
 // keeps both cameras the right shape for the window
@@ -87,10 +89,11 @@ function fitCameras() {
   const aspect = window.innerWidth / window.innerHeight;
   chase.aspect = aspect;
   chase.updateProjectionMatrix();
-  top.top = TOP_VIEW_M / 2;
-  top.bottom = -TOP_VIEW_M / 2;
-  top.left = (-TOP_VIEW_M / 2) * aspect;
-  top.right = (TOP_VIEW_M / 2) * aspect;
+  const halfH = (TOP_VIEW_M / 2) * Math.max(1, 1 / aspect);
+  top.top = halfH;
+  top.bottom = -halfH;
+  top.left = -halfH * aspect;
+  top.right = halfH * aspect;
   top.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
@@ -141,8 +144,9 @@ function goTo(i: number) {
 }
 goTo(leg);
 
-// hides a 2 m cube on the middle of the first path's longest leg, like tools/lidar_report.cpp.
+// picks a spot for a 2 m cube on the middle of the first path's longest leg, like tools/lidar_report.cpp.
 // the drone isn't told about it, so the lidar has to find it and it has to replan
+let cube: number[] | null = null;
 function hideCube() {
   const n = sim._path_len();
   const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
@@ -154,20 +158,34 @@ function hideCube() {
   // too short a leg would put the cube on the start or the goal
   if (best <= 6) return;
   const mid = [0, 1, 2].map((k) => (pts[3 * bestI + k] + pts[3 * bestI - 3 + k]) / 2);
-  const [x0, y0, z0, x1, y1, z1] = [mid[0] - 1, mid[1] - 1, mid[2] - 1, mid[0] + 1, mid[1] + 1, mid[2] + 1];
-  sim._add_box(x0, y0, z0, x1, y1, z1);
-  scene.add(buildUnknown(x0, y0, z0, x1, y1, z1));
+  cube = [mid[0] - 1, mid[1] - 1, mid[2] - 1, mid[0] + 1, mid[1] + 1, mid[2] + 1];
 }
 if (!stuck) hideCube();
+
+// drops the cube in once the drone is under way (2 m/s). natively it's there from the start, but the lidar
+// would spot it from the pad and the replan would be over before anyone saw it
+function dropCube() {
+  if (!cube || Math.hypot(now[3], now[4], now[5]) < 2) return;
+  const [x0, y0, z0, x1, y1, z1] = cube;
+  sim._add_box(x0, y0, z0, x1, y1, z1);
+  scene.add(buildUnknown(x0, y0, z0, x1, y1, z1));
+  cube = null;
+}
 
 // moves on to the next goal once the path is flown and the drone is close enough to its end
 // plain squared distance instead of Math.hypot, whose rounding can differ between browsers
 function updateMission() {
-  // the lidar made it replan: draw the new path
+  // the lidar made it replan: keep the old path faded for 2 s and draw the new one
   if (sim._replan_count() !== replans) {
     replans = sim._replan_count();
+    oldPath.geometry.dispose();
+    oldPath.geometry = pathLine.geometry.clone();
+    oldPath.visible = true;
+    oldPathUntil = sim._sim_tick() + 2000;
     drawPath();
   }
+  // a hold after a failed replan is one point, so it counts as done right away and the loop moves to the next goal.
+  // natively (lidar_report) the drone just stays holding
   if (stuck || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
   if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
@@ -198,9 +216,11 @@ function placeDrone(alpha: number) {
   ghost.quaternion.slerpQuaternions(qa, qb, alpha);
 }
 
-// copies the last lidar turn's hits into the dots, only when a new turn came in
+// copies the last lidar turn's hits into the dots, only when a new turn came in.
+// turns happen on step 50 of every 100, so this counts them off the wasm clock
 let hitsShown = -1;
 function placeHits() {
+  const scans = Math.floor((sim._sim_tick() + 50) / 100);
   if (scans === hitsShown) return;
   hitsShown = scans;
   const n = sim._hits_len();
@@ -210,13 +230,20 @@ function placeHits() {
   hits.geometry.setDrawRange(0, n);
 }
 
-// one error sample every 100 steps (10 a second of sim time), right after the lidar turn on step 50 of each 100
-let simSteps = 0;
-let scans = 0;
+// the plot gets the average error over each 100 steps (10 a second of sim time). a single sample would always land
+// on the gps fix step, right when the error is smallest
+let errSum = 0;
+let oldPathUntil = 0;
 function afterStep() {
-  simSteps++;
-  if (simSteps % 100 === 50) scans++;
-  if (simSteps % 100 === 0) plot.push(Math.hypot(now[0] - estNow[0], now[1] - estNow[1], now[2] - estNow[2]));
+  const tick = sim._sim_tick();
+  errSum += Math.hypot(now[0] - estNow[0], now[1] - estNow[1], now[2] - estNow[2]);
+  if (tick % 100 === 0) {
+    plot.push(errSum / 100);
+    errSum = 0;
+  }
+  // the old path fades out 2 s after a replan
+  if (oldPath.visible && tick >= oldPathUntil) oldPath.visible = false;
+  dropCube();
 }
 
 // chase camera eases toward a spot 3 m behind and 1 m above the drone, along its heading

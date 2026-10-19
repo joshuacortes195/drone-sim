@@ -5,7 +5,8 @@
 #include <vector>
 
 // shortest cell path from start to goal through free cells, as cell centers, 26 neighbors.
-// empty when the start or goal is blocked or there's no way through
+// a blocked start starts from the closest free cell up to 4 cells (2 m) away.
+// empty when the goal is blocked, the start is deeper in than that, or there's no way through
 std::vector<Vec3> astar(const Grid& g, Vec3 start, Vec3 goal);
 
 // drops every waypoint it can skip while the straight segments stay clear of the boxes

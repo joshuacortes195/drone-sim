@@ -52,7 +52,7 @@ From `npm run build`:
 
 ## Phase 5b page: flying on the estimate with the lidar (my PC)
 
-Checked 2026-10-18 on my PC (AMD Ryzen 7 3700X, 16 GB RAM, Windows 10 Home 19045), headless Chrome 155 driven by Playwright, the Vite dev server, wasm from emcc 6.0.12. Not comparable with the Mac numbers above.
+Checked 2026-10-18 on my PC, rerun 2026-10-19 after the review fixes (the cube now drops in once the drone is moving, the plot averages each 0.1 s), same PC (AMD Ryzen 7 3700X, 16 GB RAM, Windows 10 Home 19045), headless Chrome 155 driven by Playwright, the Vite dev server, wasm from emcc 6.0.12. Not comparable with the Mac numbers above.
 
 Each physics step now also runs the IMU and the estimator, with GPS and magnetometer every 100 steps and a full lidar turn (2,880 rays) plus the replan check every 100 steps.
 
@@ -62,7 +62,9 @@ Each physics step now also runs the IMU and the estimator, with GPS and magnetom
 | frame rate (readout every 2.5 s, 24 readings) | 180 fps every reading, probably the display's refresh rate, not checked |
 | physics steps per second | 999 to 1001 every reading |
 | physics per frame (performance.now, coarse at this size) | 0.08 to 0.18 ms |
-| replans in 62 s | 1 (the hidden cube on the first leg) |
+| replans in 62 s | 3, all in the first 4.5 s (the cube dropped on the first leg, its front then its side). Before the fix it was 1, at step 50 with the drone still on the pad |
 | wasm vs native plans on the 200 queries from `plan_report` | 200 of 200 same waypoint count, path lengths identical |
 
-The worst replan runs inside one physics step, so it holds up that frame. Natively the worst one in `results/lidar.md` is 145 ms.
+The worst replan runs inside one physics step, so it holds up that frame. Natively the worst one in `results/lidar.md` is 143 ms on a quiet machine, and the review saw 164 ms in wasm with other work running.
+
+On a 390 x 844 phone viewport (Playwright, same build) there are no console errors, the map view now fits 60 m across the narrow side, the plot title stays put while hovering, and the panel and the readout don't overlap. The readout wraps to two lines.

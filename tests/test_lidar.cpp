@@ -117,6 +117,13 @@ TEST_CASE("add_hits: known buildings add nothing, a dropped box gets blocked onc
   CHECK(g.blocked(g.ix(4 - kMargin / 2), g.iy(0.25), g.iz(5.25)));
   // the same hits again add nothing
   CHECK(!add_hits(g, grown, hits, boxes, s.p));
+
+  // a hit 6 cm off a known wall (2x the lidar's 3 cm noise) seen from 0.5 m away still counts as the wall
+  Box wall{{2, -1, 4}, {4, 1, 6}};
+  Grid g2 = city_grid({wall});
+  std::vector<Box> grown2{grow(wall, kMargin)};
+  CHECK(!add_hits(g2, grown2, {{1.94, 0, 5}}, {wall}, {1.44, 0, 5}));
+  CHECK(grown2.size() == 1);
 }
 
 TEST_CASE("replan: a dropped box the lidar sees cuts the path, the new path goes around it") {
@@ -143,12 +150,19 @@ TEST_CASE("replan: a dropped box the lidar sees cuts the path, the new path goes
   REQUIRE(add_hits(g, grown, scan(Lidar{}, sn, s, s, world), boxes, s.p));
   REQUIRE(path_blocked(path, {dropped}));
 
-  // the replan goes from the start to the goal and stays clear of the real box
-  REQUIRE(replan(path, g, grown, known, start, goal));
+  // the replan goes from exactly where the drone thinks it is (off its cell center, so the setpoint
+  // doesn't jump) to the goal and stays clear of the real box
+  Vec3 from = start + Vec3{0.2, -0.15, 0.1};
+  REQUIRE(g.ix(from.x) == g.ix(start.x));
+  REQUIRE(g.iy(from.y) == g.iy(start.y));
+  REQUIRE(g.iz(from.z) == g.iz(start.z));
+  REQUIRE(replan(path, g, grown, known, from, goal));
   REQUIRE(path.size() >= 2);
-  CHECK(norm(path.front() - start) < 1e-9);
+  CHECK(norm(path.front() - from) < 1e-9);
   CHECK(norm(path.back() - goal) < 1e-9);
   CHECK(!path_blocked(path, {grow(dropped, kReach)}));
+  // it comes back smoothed, so smoothing it again changes nothing
+  CHECK(smooth(path, grown).size() == path.size());
 }
 
 TEST_CASE("replan: new boxes off the path leave it alone") {

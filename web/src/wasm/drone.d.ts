@@ -20,6 +20,7 @@ export interface Drone {
   _est_prev(): number;
   _hits_ptr(): number;
   _hits_len(): number;
+  _sim_tick(): number;
 }
 
 // loads the .wasm file and resolves once the module is ready

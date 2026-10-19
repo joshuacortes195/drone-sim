@@ -56,7 +56,11 @@ bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grow
             Vec3 goal) {
   // only the new boxes matter, the old ones were already planned around
   if (!path_blocked(path, std::vector<Box>(grown.begin() + long(new_from), grown.end()))) return false;
-  // a fresh smoothed path on everything it knows now
-  path = smooth(astar(g, from, goal), grown);
+  // a fresh path on everything it knows now
+  path = astar(g, from, goal);
+  // start it right where the drone thinks it is instead of its cell center, so the setpoint doesn't jump.
+  // any point in a free cell is clear of the walls by the margin. a blocked start keeps the free cell it found
+  if (!path.empty() && !g.blocked(g.ix(from.x), g.iy(from.y), g.iz(from.z))) path[0] = from;
+  path = smooth(path, grown);
   return true;
 }

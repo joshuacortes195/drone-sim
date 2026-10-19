@@ -76,6 +76,15 @@ export function buildPath() {
   return line;
 }
 
+// the path it just gave up after a replan, faded, so you can see what changed
+export function buildOldPath() {
+  const mat = new THREE.LineBasicMaterial({ color: 0x2a9d8f, transparent: true, opacity: 0.3, depthWrite: false });
+  const line = new THREE.Line(new THREE.BufferGeometry(), mat);
+  line.frustumCulled = false;
+  line.visible = false;
+  return line;
+}
+
 // small marker where the drone is being sent
 export function buildTarget() {
   return new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshBasicMaterial({ color: 0x2a9d8f }));
