@@ -129,3 +129,27 @@ TEST_CASE("in a still hover the accelerometer pulls a wrong tilt estimate back t
   fly(f, hold, 100);
   CHECK(att_err(f.e.q, f.s.q) < 0.025);
 }
+
+TEST_CASE("a big up and down accel bias doesn't switch the tilt pull off") {
+  // 0.4 m/s^2 puts the raw reading 4% off 1 g, outside the 3% trust window until the bias is learned
+  Flight f = start(quiet(), 1);
+  f.truth = true;
+  f.sn.accel_bias = {0, 0, 0.4};
+  f.e.q = axis_angle({1, 0, 0}, 0.05);
+  Setpoint hold;
+  hold.pos = {0, 0, 5};
+  fly(f, hold, 100);
+  CHECK(att_err(f.e.q, f.s.q) < 0.025);
+}
+
+TEST_CASE("the tilt pull learns a roll gyro bias that shows up after calibration") {
+  Flight f = start(quiet(), 1);
+  f.truth = true;
+  f.sn.gyro_bias = {0.005, 0, 0};
+  Setpoint hold;
+  hold.pos = {0, 0, 5};
+  fly(f, hold, 300);
+  // without the integral it never catches up, 0.71 rad off after 300 s when I tried it
+  CHECK(std::abs(f.e.gyro_bias.x - 0.005) < 0.001);
+  CHECK(att_err(f.e.q, f.s.q) < 0.01);
+}

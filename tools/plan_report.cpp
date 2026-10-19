@@ -64,9 +64,11 @@ static Flight fly(const std::vector<Vec3>& path, const std::vector<Box>& boxes, 
   Noise n = noise ? *noise : Noise{};
   Sensors sn = make_sensors(n, seed);
   Estimator est = make_estimator(s, n);
-  Vec3 gsum;
-  for (int i = 0; i < 1000; i++) gsum = gsum + read_imu(sn, P, s, 0.001).gyro;
-  est.gyro_bias = gsum * 0.001;
+  if (on_estimate) {
+    Vec3 gsum;
+    for (int i = 0; i < 1000; i++) gsum = gsum + read_imu(sn, P, s, 0.001).gyro;
+    est.gyro_bias = gsum * 0.001;
+  }
   double est_sum = 0, est_worst = 0, gps_sum = 0;
   int fixes = 0;
 
@@ -216,8 +218,8 @@ int main(int argc, char** argv) {
     Results& r = est[k];
     std::printf("\nthe same flights on the estimate, %s (bmi088 imu, ist8310 magnetometer, gps at 10 Hz, 1 s gyro calibration):\n",
                 names[k]);
-    std::printf("flights within the drone's 0.356 m reach of a building or the ground: %d, center inside one: %d\n",
-                r.too_close, r.inside);
+    std::printf("flights within the drone's %.3f m reach of a building or the ground: %d, center inside one: %d\n",
+                kReach, r.too_close, r.inside);
     summary("worst to setpoint (m)", r.worst);
     summary("closest to building/ground (m)", r.clear);
     std::printf("%-30s %.3f m\n", "closest any flight got", *std::min_element(r.clear.begin(), r.clear.end()));

@@ -299,7 +299,7 @@ An accelerometer measures specific force: every push except gravity, divided by 
 
 In a steady hover that reading points straight up, so it tells me which way is down and I can correct tilt with it. But when the drone tilts to speed up, the thrust tilts with it and the accelerometer still reads roughly "straight up the body". It can't see the tilt. In fast flight its sideways part is mostly rotor drag, not tilt (Martin and Salaün, 2010).
 
-There's a second trap: in a hover, a sideways accelerometer bias looks exactly like a tilt. A 0.2 m/s² bias reads the same as being tilted 0.2 / 9.81 = 20 mrad. Nothing in hover can tell those two apart, so my attitude estimate is about that far off, 9 to 30 mrad at worst over four seeded flights. The up and down bias is different: GPS height catches it, and my filter learns it.
+In a hover, a sideways accelerometer bias also looks exactly like a tilt. A 0.2 m/s² bias reads the same as being tilted 0.2 / 9.81 = 20 mrad. Nothing in hover can tell those two apart, so my attitude estimate is about that far off, 9 to 30 mrad at worst over four seeded flights. The up and down bias is different: GPS height catches it, and my filter learns it.
 
 Interview questions:
 - What does an accelerometer read in free fall?
@@ -316,7 +316,7 @@ Correct runs at 10 Hz with GPS. It compares the fix with the predicted position.
 
 It stays a linear Kalman filter because I treat the rotation from the attitude filter as known at each step. A full error state EKF would put attitude in the filter too. I left that out of scope.
 
-I set Q's accelerometer noise to 0.01 m/s²/√Hz, well above the BMI088's 0.0016. The filter doesn't only have to cover sensor noise. It also has to cover what my model gets wrong, like reading the IMU once per step and the tilt pull below. With perfect sensors that change took the worst position error through a maneuver from 11 cm to 1 cm, and with real noise it changed nothing.
+I set Q's accelerometer noise to 0.01 m/s²/√Hz, well above the BMI088's 0.0016. Q has to cover what my model gets wrong as well as sensor noise, like reading the IMU once per step and the tilt pull below. With perfect sensors that change took the worst position error through a maneuver from 11 cm to 1 cm (measured with an earlier tilt setting), and with real noise it changed almost nothing.
 
 With real noise, over 200 planned flights, the estimate was 1.08 m RMS off at the median while raw GPS was 5.15 m off, so about 5 times better.
 
@@ -332,10 +332,10 @@ Interview questions:
 
 Attitude comes from a complementary filter. The gyro gets integrated every step, which is fast and smooth but drifts. Two slow references pull it back: a weak nudge toward the tilt the accelerometer suggests, and a nudge toward the heading the magnetometer reads. The fast part comes from the gyro and the slow part from the references, which is why it's called complementary. Without the magnetometer nothing would ever fix yaw, because gravity says nothing about which way north is.
 
-Mine is the PI version (Mahony). Part of each correction also goes into a learned gyro bias. With a 1 deg/s yaw gyro bias the gyro alone would be 1.6 rad off after 90 s. Mine ends within 0.02 rad and learns the bias to within 0.002 rad/s.
+Mine is the PI version (Mahony). Part of each correction also goes into a learned gyro bias. With a 1 deg/s yaw gyro bias the gyro alone would be 1.6 rad off after 90 s. Mine ended 0.0015 rad off and learned the bias to within 0.0003 rad/s.
 
 Three things I learned tuning it:
-- The tilt pull only trusts the accelerometer when it reads within 3% of 1 g, and even then the pull is weak (0.03 rad/s per rad). Stronger made the estimate lean toward level during hard maneuvers.
+- The tilt pull only trusts the accelerometer when it reads within 3% of 1 g, after taking off the up and down bias the Kalman filter learned (checking the raw reading kept the pull switched off for a whole flight when the z bias was big). Even then the pull is weak (0.03 rad/s per rad). Stronger made the estimate lean toward level during hard maneuvers.
 - The integral gain has to match the pull for good damping, ki = (kp / 1.4)² for 0.7. My first pick was underdamped, and a wrong tilt took ages to come back.
 - The tilt pull uses the raw accelerometer, not the Kalman filter's bias corrected one. Otherwise, with a wrong tilt, the Kalman filter learns the fake sideways push as accelerometer bias within seconds, the bias corrected reading then agrees with the wrong tilt, and nothing fixes it. A 0.05 rad error only came down to 0.038 in 100 s that way. With the raw reading it came down to 0.010.
 
@@ -353,7 +353,7 @@ Interview questions:
 
 Once the controller flies on the estimate instead of the truth, everything downstream inherits the estimate's error. I flew the same 200 planned paths three ways. On the truth, no flight came within the drone's 0.356 m reach of a building. On the estimate with a regular NEO-M8N GPS, 51 of 200 did, and one went inside a building. The filter itself was doing fine: 1.08 m RMS error vs 5.15 m for raw GPS. But the planner only keeps 0.789 m from buildings in 4 m wide streets, and that margin assumes the drone knows where it is.
 
-The fix was better position data, not a bigger margin. Growing the margin by 2 to 3 m would close most of the streets. An RTK GPS (u-blox ZED-F9P) corrects its fixes with a base station nearby and gets about a centimeter. With it the estimate was 1.1 cm RMS off, and the flights were as safe as on the truth: the closest any of them got was 0.679 m vs 0.680 m. So RTK is the default, and the regular GPS stays as the comparison. Real drones that fly close to things use RTK, lidar or cameras for the same reason.
+Growing the margin by 2 to 3 m would close most of the streets, so I fixed it with better position data instead. An RTK GPS (u-blox ZED-F9P) corrects its fixes with a base station nearby and gets about a centimeter. With it the estimate was 1.1 cm RMS off, and the flights were as safe as on the truth: the closest any of them got was 0.679 m vs 0.680 m. So I use RTK from here on, and the regular GPS stays as the comparison. Real drones that fly close to things use RTK, lidar or cameras for the same reason.
 
 Where it lives: `rtk()` in `core/sensors.cpp`, the flights in `tools/plan_report.cpp`, the numbers in `results/estimation.md`.
 

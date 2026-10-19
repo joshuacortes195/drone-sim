@@ -29,7 +29,7 @@ TEST_CASE("a perfect accelerometer reads 9.81 up in hover and zero in free fall"
   CHECK(norm(fall.accel) == doctest::Approx(0).epsilon(1e-12));
 }
 
-TEST_CASE("a perfect accelerometer reads in the body frame, tipped 90 degrees gravity's push shows on body x") {
+TEST_CASE("a perfect accelerometer reads in the body frame, tipped 90 degrees thrust still reads along body z") {
   // nose pitched straight down (rotated +90 about y), rotors at hover: thrust points along world +x
   Sensors sn = perfect();
   QuadState s;

@@ -69,7 +69,7 @@ TEST_CASE("clockwise pair up and counterclockwise pair down yaws left, plus the 
   CHECK(f.force.z == doctest::Approx(P.mass * 9.81));
   // holding it for 0.1 s turns the nose left at about 0.032 / Izz * 0.1 = 0.0328 rad/s
   QuadState later = fly(s, s.rotor, 0.1);
-  CHECK(later.w.z == doctest::Approx(0.0328).epsilon(0.05));
+  CHECK(std::abs(later.w.z - 0.0328) < 0.05 * 0.0328);  // approx would allow +-0.05 absolute here
 }
 
 TEST_CASE("motors off from rest it falls as z0 - g t^2 / 2") {

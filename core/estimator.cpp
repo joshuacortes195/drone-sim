@@ -11,7 +11,7 @@ static const double kHeadingI = 0.002;  // share of it that goes into the learne
 
 // smallest noise the kalman filter assumes. the accel one is well above the bmi088's 1.57e-3
 // to cover what the model gets wrong (step timing, the tilt pull), see results/estimation.md
-static const double kMinDensity = 1e-2, kMinWalk = 1e-5, kMinGps = 0.01;
+static const double kMinDensity = 1e-2, kMinWalk = 1e-5, kMinGps = 1e-3;
 
 // 9 by 9 matrix helpers for the kalman filter, row major
 using Mat9 = double[9][9];
@@ -56,9 +56,11 @@ void predict(Estimator& e, const Imu& m, double dt) {
 
   // tilt check: in a steady hover the accelerometer points up the same way gravity does.
   // only trusted within 3% of 1 g, since speeding up or turning hard bends that reading away from true up.
-  // uses the raw reading, not the kalman filter's bias guess, or the two filters trade a tilt error back and forth
+  // the direction uses the raw reading, not the kalman filter's bias guess, or the two filters trade a tilt error
+  // back and forth. the 1 g check takes off the learned up and down bias, which gps height makes trustworthy
   double fn = norm(m.accel);
-  double trust = std::max(0.0, 1 - std::abs(fn / 9.81 - 1) / 0.03);
+  double size = norm(m.accel - Vec3{0, 0, e.accel_bias.z});
+  double trust = std::max(0.0, 1 - std::abs(size / 9.81 - 1) / 0.03);
   Vec3 err;
   if (trust > 0) err = cross(m.accel * (1 / fn), rotate(conj(e.q), {0, 0, 1})) * trust;
 
@@ -94,7 +96,8 @@ void predict(Estimator& e, const Imu& m, double dt) {
   mul(F, e.P, FP);
   mul(FP, Ft, FPFt);
 
-  // plus the new uncertainty this step adds: accel noise into velocity, bias wander into the bias
+  // plus the new uncertainty this step adds: accel noise into velocity, bias wander into the bias.
+  // leaves out the tiny dt^2 and dt^3 position terms and any attitude error, one reason the accel noise is set high
   Vec3 d = e.n.accel_density;
   double d2[3] = {std::pow(std::max(d.x, kMinDensity), 2), std::pow(std::max(d.y, kMinDensity), 2),
                   std::pow(std::max(d.z, kMinDensity), 2)};
