@@ -1,4 +1,5 @@
 #include "lidar.h"
+#include "planner.h"
 
 #include <cmath>
 #include <limits>
@@ -49,4 +50,13 @@ bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, c
     added = true;
   }
   return added;
+}
+
+bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grown, size_t new_from, Vec3 from,
+            Vec3 goal) {
+  // only the new boxes matter, the old ones were already planned around
+  if (!path_blocked(path, std::vector<Box>(grown.begin() + long(new_from), grown.end()))) return false;
+  // a fresh smoothed path on everything it knows now
+  path = smooth(astar(g, from, goal), grown);
+  return true;
 }

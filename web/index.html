@@ -18,12 +18,33 @@
       }
       .bar span { padding: 4px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.75); }
       .bar button { font: inherit; color: #1d2733; background: #fff; border: 1px solid #9aa7b6; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+      /* styling for the bottom left panel with the error plot and the color key */
+      .panel {
+        position: fixed; left: 8px; bottom: 8px; width: min(340px, calc(100vw - 32px));
+        padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.85);
+        font: 11px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
+      }
+      .panel canvas { width: 100%; height: 110px; touch-action: none; }
+      /* one row of keys, each a small mark in its color and a name */
+      .key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+      .key i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+      .key i.dot { width: 6px; height: 6px; border-radius: 50%; vertical-align: 1px; }
+      .key i.box { background: rgba(135, 150, 168, 0.35); outline: 1px solid #1d2733; outline-offset: -1px; }
     </style>
   </head>
   <body>
     <div class="bar">
       <button id="cam">top down view (c)</button>
       <span id="hud">loading</span>
+    </div>
+    <div class="panel">
+      <canvas id="plot" role="img" aria-label="estimate error plot, waiting for data"></canvas>
+      <div class="key">
+        <span><i style="background:#4a6fe3"></i>estimate (ghost)</span>
+        <span><i class="dot" style="background:#d6336c"></i>lidar hits</span>
+        <span><i style="background:#2a9d8f;height:2px;vertical-align:3px"></i>path</span>
+        <span><i class="box"></i>box it wasn't told about</span>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

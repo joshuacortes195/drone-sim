@@ -91,19 +91,17 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& cit
       QuadState e = estimate(est);
       bool added = add_hits(g, grown, scan(L, sn, s, e, world), city_boxes, e.p);
       f.scan_ms.push_back(ms_since(t0));
-      // only replan when the new cells cut the path it's on
-      if (added && path_blocked(path, std::vector<Box>(grown.begin() + long(known), grown.end()))) {
-        t0 = std::chrono::steady_clock::now();
-        auto next = smooth(astar(g, e.p, goal), grown);
+      // only replan when the new cells cut the path it's on (the shared rule in core/lidar.cpp)
+      t0 = std::chrono::steady_clock::now();
+      if (added && replan(path, g, grown, known, e.p, goal)) {
         f.replan_ms.push_back(ms_since(t0));
         if (f.seen_at < 0) f.seen_at = box_dist(s.p, dropped);
         f.replans++;
-        if (next.empty()) {
+        if (path.empty()) {
           // nowhere to go: hold where it is
           f.stuck = true;
-          next = {e.p};
+          path = {e.p};
         }
-        path = next;
         yaw = heading(e.q);
         start_i = i;
         end_i = i + int(std::lround((path_time(path, 5, 3) + 3) / 0.001));

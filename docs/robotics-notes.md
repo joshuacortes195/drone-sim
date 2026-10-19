@@ -392,9 +392,24 @@ Interview questions:
 
 Replanning every scan would waste time, so the drone only replans when the boxes from this scan cut the path it's flying. Then it plans from the estimate to the same goal. If it's already inside the margin of something it just saw, its own cell is blocked, so A* now starts from the closest free cell within 2 m. Across 200 trips with an unknown cube dropped on the path, the blind drone hit the cube every time. With the lidar none of them did, all 200 reached the goal, and the worst one came 0.112 m from the cube. That one was diving at 57 degrees, steeper than the lidar can look down.
 
-Where it lives: `tools/lidar_report.cpp`, the blocked start in `astar()` in `core/planner.cpp`, the numbers in `results/lidar.md`.
+Where it lives: `replan()` in `core/lidar.cpp` (the tool and the browser both call it, so the page runs the rule I measured), the flights in `tools/lidar_report.cpp`, the blocked start in `astar()` in `core/planner.cpp`, the numbers in `results/lidar.md`.
 
 Interview questions:
 - When do you replan, and how do you avoid replanning all the time?
 - What happens when the new obstacle closes off every way through?
 - What are the blind spots of a 16 beam lidar on a drone, and how would you cover them?
+
+## Showing the estimate: the ghost and the error plot
+
+In the page the controller now flies on the estimate, same as the native flights, and the real drone is what the physics moves. To show the gap I draw a second, see-through blue drone where the estimate says it is. With RTK the two sit on top of each other, which is the honest picture: the estimate is about a centimeter off. I made the ghost 15% bigger so you can still see it around the real one.
+
+The plot under it is the distance between the two over the last 30 seconds, sampled 10 times a second of sim time. It's the number a real drone can never see, because it never knows the truth. In the sim I can, and it's the quickest way to catch an estimator bug. Between GPS fixes the filter runs on the IMU alone and the error creeps up, then each fix pulls it back, so the line has small saw teeth.
+
+The page also hides a 2 m cube on the first path's longest leg, the same setup as the native lidar flights. The lidar finds it, the hits show as magenta dots, and the path gets redrawn when it replans.
+
+Where it lives: the estimator and the lidar turn in `wasm/bindings.cpp`, the ghost and the dots in `web/src/scene.ts`, the plot in `web/src/plot.ts`.
+
+Interview questions:
+- How do you know your estimator works when the real drone never knows its true position?
+- Why does the error grow between GPS fixes and drop at each one?
+- What would the ghost look like with a regular GPS instead of RTK?

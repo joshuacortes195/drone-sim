@@ -49,3 +49,20 @@ From `npm run build`:
 | `drone.wasm` | 19.89 kB | 10.52 kB |
 | page js (three.js plus my code) | 564.21 kB | 142.66 kB |
 | `index.html` | 0.87 kB | 0.53 kB |
+
+## Phase 5b page: flying on the estimate with the lidar (my PC)
+
+Checked 2026-10-18 on my PC (AMD Ryzen 7 3700X, 16 GB RAM, Windows 10 Home 19045), headless Chrome 155 driven by Playwright, the Vite dev server, wasm from emcc 6.0.12. Not comparable with the Mac numbers above.
+
+Each physics step now also runs the IMU and the estimator, with GPS and magnetometer every 100 steps and a full lidar turn (2,880 rays) plus the replan check every 100 steps.
+
+| | value |
+|---|---|
+| console errors on a fresh load and 62 s of flying | none |
+| frame rate (readout every 2.5 s, 24 readings) | 180 fps every reading, probably the display's refresh rate, not checked |
+| physics steps per second | 999 to 1001 every reading |
+| physics per frame (performance.now, coarse at this size) | 0.08 to 0.18 ms |
+| replans in 62 s | 1 (the hidden cube on the first leg) |
+| wasm vs native plans on the 200 queries from `plan_report` | 200 of 200 same waypoint count, path lengths identical |
+
+The worst replan runs inside one physics step, so it holds up that frame. Natively the worst one in `results/lidar.md` is 145 ms.

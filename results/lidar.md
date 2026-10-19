@@ -11,7 +11,7 @@ Measured 2026-10-18 on my PC with `tools/lidar_report.cpp` and the lidar tests.
 - flying: on the RTK estimate (ZED-F9P GPS, BMI088 IMU, IST8310 magnetometer, same as `results/estimation.md`), 1 s gyro calibration on the pad, 5 m/s cruise, 3 m/s² ramps, 1 ms physics
 - lidar: Velodyne VLP-16, one full turn every 100 steps (10 Hz), 50 steps after each GPS fix. A turn is taken all at once from the true pose, and the hits are placed with the estimated pose. New hits go into the grid and the box list. If the boxes from this turn cut the path being flown, it plans again from the estimate (A* plus smoothing) and starts the new path from rest
 - closest distances are from the drone's true center to the outside of the boxes. The drone's reach is 0.356 m
-- timings are wall clock around `scan()` + `add_hits()` and around `astar()` + `smooth()`
+- timings are wall clock around `scan()` + `add_hits()` and around `replan()` (the check that the new boxes cut the path, then `astar()` + `smooth()`), only counted when it did replan. `replan()` is the same function the browser runs
 - run it: build, then `build/lidar_report.exe` (about 30 s)
 
 ## The lidar
@@ -44,8 +44,10 @@ With the lidar on:
 |---|---|---|---|---|
 | distance to the cube at the first replan (m) | 15.0 | 27.1 | 37.7 | 200 |
 | replans per flight | 2 | 5 | 7 | 200 |
-| `scan()` + `add_hits()` per turn (ms) | 0.726 | 1.120 | 2.004 | 33,655 |
-| replan, `astar()` + `smooth()` (ms) | 10.4 | 43.1 | 136.7 | 543 |
+| `scan()` + `add_hits()` per turn (ms) | 0.752 | 1.180 | 3.233 | 33,655 |
+| `replan()`, cut check + `astar()` + `smooth()` (ms) | 11.0 | 42.7 | 145.3 | 543 |
+
+Timings are from the rerun after the replan rule moved into `core/lidar.cpp` (same day). Every count and distance came out identical to the first run, only the timings moved, which they also do between runs of the same build. The first run had 0.726 ms and 10.4 / 136.7 ms.
 
 Every flight replanned at least once. One replan found no path (seed 47, the drone held for a turn, then a later replan got through), and that flight still reached its goal.
 
@@ -70,4 +72,4 @@ Each row is one full run of the 200 trips with the lidar on.
 - the lidar only adds obstacles, it never clears them. Nothing here moves, so that's fine for now
 - the planner treats space it hasn't seen as free. Going around a box's front corner, the new path can cut behind it, and the side only shows up once the drone gets past the front. That's why most flights replan 2 to 5 times
 - each replan starts the new path from rest, so the drone brakes hard even when the new path heads the same way
-- the worst replan (137 ms) runs inside one physics step natively. In the page it would hold up a frame
+- the worst replan (145 ms) runs inside one physics step natively. In the page it would hold up a frame

@@ -93,3 +93,37 @@ export function buildMapArrow() {
   arrow.visible = false;
   return arrow;
 }
+
+// colors shared with the error plot and the key, checked as a set for color blind contrast
+export const COLORS = { path: 0x2a9d8f, estimate: 0x4a6fe3, hits: 0xd6336c };
+
+// the ghost: the same quad drawn see-through in blue where the estimate says the drone is
+export function buildGhost(sim: Drone) {
+  const ghost = buildDrone(sim);
+  const mat = new THREE.MeshBasicMaterial({ color: COLORS.estimate, transparent: true, opacity: 0.45, depthWrite: false });
+  ghost.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.material = mat;
+  });
+  // a bit bigger so it shows around the real drone when the two sit on top of each other
+  ghost.scale.setScalar(1.15);
+  return ghost;
+}
+
+// the last lidar turn's hits as dots, room for every beam of one turn
+export function buildHits(max: number) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * max), 3));
+  geo.setDrawRange(0, 0);
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: COLORS.hits, size: 3, sizeAttenuation: false }));
+  pts.frustumCulled = false;
+  return pts;
+}
+
+// a box the drone wasn't told about: faint fill with dark edges, so it reads as something other than the city
+export function buildUnknown(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) {
+  const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  const box = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x8796a8, transparent: true, opacity: 0.35 }));
+  box.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x1d2733 })));
+  box.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  return box;
+}

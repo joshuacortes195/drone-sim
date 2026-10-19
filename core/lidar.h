@@ -31,3 +31,9 @@ constexpr double kKnownTol = 0.1, kKnownAngle = 0.03;
 // true when anything new turned up
 bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, const std::vector<Box>& known,
               Vec3 from);
+
+// the replan rule the page and lidar_report share. when the boxes add_hits just added (grown from new_from on)
+// cut the path, plans a new one from where the drone thinks it is to the goal. true when it replanned.
+// the new path is empty when there's no way through, the caller decides what to do then
+bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grown, size_t new_from, Vec3 from,
+            Vec3 goal);

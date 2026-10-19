@@ -141,12 +141,62 @@ TEST_CASE("replan: a dropped box the lidar sees cuts the path, the new path goes
   QuadState s = at(start);
   size_t known = grown.size();
   REQUIRE(add_hits(g, grown, scan(Lidar{}, sn, s, s, world), boxes, s.p));
-  CHECK(path_blocked(path, std::vector<Box>(grown.begin() + long(known), grown.end())));
+  REQUIRE(path_blocked(path, {dropped}));
 
-  // planning again on what it knows now stays clear of the real box
-  auto again = smooth(astar(g, start, goal), grown);
-  REQUIRE(!again.empty());
-  CHECK(!path_blocked(again, {grow(dropped, kReach)}));
+  // the replan goes from the start to the goal and stays clear of the real box
+  REQUIRE(replan(path, g, grown, known, start, goal));
+  REQUIRE(path.size() >= 2);
+  CHECK(norm(path.front() - start) < 1e-9);
+  CHECK(norm(path.back() - goal) < 1e-9);
+  CHECK(!path_blocked(path, {grow(dropped, kReach)}));
+}
+
+TEST_CASE("replan: new boxes off the path leave it alone") {
+  auto boxes = city(3);
+  Grid g = city_grid(boxes);
+  std::vector<Box> grown;
+  for (const Box& b : boxes) grown.push_back(grow(b, kMargin));
+  Vec3 start = g.center(g.ix(0.25), g.iy(0.25), g.iz(5.25));
+  Vec3 goal = g.center(g.ix(18.25), g.iy(18.25), g.iz(5.25));
+  auto path = smooth(astar(g, start, goal), grown);
+  REQUIRE(path.size() >= 2);
+
+  // an old hit cell the drone is already sitting in, like after a blocked start. it was planned around
+  // once, so it mustn't set off a replan every scan
+  grown.push_back({start - Vec3{0.5, 0.5, 0.5}, start + Vec3{0.5, 0.5, 0.5}});
+  REQUIRE(path_blocked(path, {grown.back()}));
+
+  // a new box high up in a far corner, nowhere near the path
+  size_t known = grown.size();
+  Box far{{-28, -28, 17}, {-27, -27, 18}};
+  mark(g, far);
+  grown.push_back(far);
+  REQUIRE(!path_blocked(path, {far}));
+
+  auto before = path;
+  CHECK(!replan(path, g, grown, known, start, goal));
+  REQUIRE(path.size() == before.size());
+  for (size_t i = 0; i < path.size(); i++) CHECK(norm(path[i] - before[i]) == 0);
+}
+
+TEST_CASE("replan: a new box over the goal leaves no way through, the path comes back empty") {
+  auto boxes = city(3);
+  Grid g = city_grid(boxes);
+  std::vector<Box> grown;
+  for (const Box& b : boxes) grown.push_back(grow(b, kMargin));
+  Vec3 start = g.center(g.ix(0.25), g.iy(0.25), g.iz(5.25));
+  Vec3 goal = g.center(g.ix(18.25), g.iy(18.25), g.iz(5.25));
+  auto path = smooth(astar(g, start, goal), grown);
+  REQUIRE(path.size() >= 2);
+
+  // something new sitting right on the goal
+  size_t known = grown.size();
+  Box on_goal{goal - Vec3{1, 1, 1}, goal + Vec3{1, 1, 1}};
+  mark(g, on_goal);
+  grown.push_back(on_goal);
+
+  CHECK(replan(path, g, grown, known, start, goal));
+  CHECK(path.empty());
 }
 
 // distance from a point to the outside of a box, 0 when inside

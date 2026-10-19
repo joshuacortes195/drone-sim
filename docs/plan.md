@@ -143,7 +143,7 @@ Concepts first: sensor noise and bias, the Kalman filter, complementary filter, 
 - result: `results/estimation.md` on my PC. With the NEO-M8N the estimate is 1.08 m RMS off at the median vs 5.15 m for raw GPS. With RTK it's 0.011 m, and all 200 flights are as safe as flying on the truth (closest 0.679 m vs 0.680 m)
 - the browser still flies on the true state. The ghost drone and the estimate in the page come with phase 5b
 
-### Phase 5b: lidar and replanning (tdd, core done 2026-10-18, page next)
+### Phase 5b: lidar and replanning (tdd, done 2026-10-18)
 
 Concepts first: raycasting, turning hits into an occupancy map.
 
@@ -152,7 +152,7 @@ Concepts first: raycasting, turning hits into an occupancy map.
 - web: estimated drone (ghost) next to the true one, lidar rays, live position error plot (dataviz)
 - core done: `core/lidar.{h,cpp}` with the Velodyne VLP-16 pattern (data sheet 63-9229 Rev-K, stepped 2 deg around instead of 0.2), `ray_box()` sharing the slab test, `add_hits()` with one grown box per cell with a hit and known buildings matched within 0.1 m + 0.03 per meter, A* starting from the closest free cell within 2 m when the start is blocked, `tools/lidar_report.cpp`
 - result so far: `results/lidar.md`. With a 2 m cube dropped on each of the 200 paths, blind flights all hit it. With the lidar none do, all 200 reach the goal, closest 0.112 m on a 57 degree dive the lidar can't see down
-- still to do: bindings and page (RTK estimate, ghost, rays, error plot), reviewer, breakdown
+- page: the drone flies on the RTK estimate with the lidar at 10 Hz. The replan rule moved into core as `replan()` (tested, the native tool calls it too). A see-through blue ghost at the estimate, the last turn's hits as dots instead of rays (2,880 lines would hide the scene), a live position error plot over 30 s, and a 2 m cube hidden on the first leg like the native flights. No console errors, 1000 steps per second, wasm plans still match native on 200 of 200 queries
 
 ### Phase 6: missions and controls
 

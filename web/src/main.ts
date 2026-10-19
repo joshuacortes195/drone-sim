@@ -1,6 +1,17 @@
 import * as THREE from 'three';
 import createDrone from './wasm/drone.js';
-import { buildDrone, buildMapArrow, buildPath, buildShadow, buildTarget, buildWorld } from './scene';
+import { buildPlot } from './plot';
+import {
+  buildDrone,
+  buildGhost,
+  buildHits,
+  buildMapArrow,
+  buildPath,
+  buildShadow,
+  buildTarget,
+  buildUnknown,
+  buildWorld,
+} from './scene';
 
 // the physics is z up (x east, y north), so every three.js object is too
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -33,6 +44,12 @@ const boxes = new Float64Array(sim.HEAPF64.buffer, sim._boxes_ptr(), 6 * sim._ne
 // views into the two state buffers: p 0-2, v 3-5, q (w x y z) 6-9, body rates 10-12, rotors 13-16
 const now = new Float64Array(sim.HEAPF64.buffer, sim._state_now(), 17);
 const prev = new Float64Array(sim.HEAPF64.buffer, sim._state_prev(), 17);
+// the same two buffers for the estimate the controller flies on
+const estNow = new Float64Array(sim.HEAPF64.buffer, sim._est_now(), 17);
+const estPrev = new Float64Array(sim.HEAPF64.buffer, sim._est_prev(), 17);
+// the last lidar turn's hit points, 16 beams x 180 steps at most
+const MAX_HITS = 16 * 180;
+const hitBuf = new Float64Array(sim.HEAPF64.buffer, sim._hits_ptr(), 3 * MAX_HITS);
 
 // renderer filling the window
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -48,7 +65,12 @@ const pathLine = buildPath();
 const shadow = buildShadow();
 const target = buildTarget();
 const arrow = buildMapArrow();
-scene.add(drone, shadow, target, arrow, pathLine);
+const ghost = buildGhost(sim);
+const hits = buildHits(MAX_HITS);
+scene.add(drone, ghost, hits, shadow, target, arrow, pathLine);
+
+// the live error plot under the readout
+const plot = buildPlot(document.getElementById('plot') as HTMLCanvasElement);
 
 // two cameras: one following behind the drone, and a flat map view looking straight down with north up
 const chase = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 500);
@@ -93,6 +115,16 @@ let leg = 0;
 let planMs = 0;
 let pathEnd = [0, 0, 0];
 let stuck = false;
+let replans = 0;
+
+// draws the path the wasm side is flying and remembers where it ends
+function drawPath() {
+  const n = sim._path_len();
+  const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
+  pathLine.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  pathEnd = [pts[3 * n - 3], pts[3 * n - 2], pts[3 * n - 1]];
+}
+
 function goTo(i: number) {
   for (let tries = 0; tries < GOALS.length; tries++, i = (i + 1) % GOALS.length) {
     const [x, y, z] = GOALS[i];
@@ -100,11 +132,8 @@ function goTo(i: number) {
     const n = sim._fly_to(x, y, z);
     planMs = performance.now() - t0;
     if (n === 0) continue;
-    // draw the new path and remember where it ends
-    const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
-    pathLine.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
-    pathEnd = [pts[3 * n - 3], pts[3 * n - 2], pts[3 * n - 1]];
-    target.position.set(pathEnd[0], pathEnd[1], pathEnd[2]);
+    drawPath();
+    target.position.set(x, y, z);
     leg = i;
     return;
   }
@@ -112,9 +141,33 @@ function goTo(i: number) {
 }
 goTo(leg);
 
+// hides a 2 m cube on the middle of the first path's longest leg, like tools/lidar_report.cpp.
+// the drone isn't told about it, so the lidar has to find it and it has to replan
+function hideCube() {
+  const n = sim._path_len();
+  const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
+  let best = 0, bestI = 0;
+  for (let i = 1; i < n; i++) {
+    const d = Math.hypot(pts[3 * i] - pts[3 * i - 3], pts[3 * i + 1] - pts[3 * i - 2], pts[3 * i + 2] - pts[3 * i - 1]);
+    if (d > best) [best, bestI] = [d, i];
+  }
+  // too short a leg would put the cube on the start or the goal
+  if (best <= 6) return;
+  const mid = [0, 1, 2].map((k) => (pts[3 * bestI + k] + pts[3 * bestI - 3 + k]) / 2);
+  const [x0, y0, z0, x1, y1, z1] = [mid[0] - 1, mid[1] - 1, mid[2] - 1, mid[0] + 1, mid[1] + 1, mid[2] + 1];
+  sim._add_box(x0, y0, z0, x1, y1, z1);
+  scene.add(buildUnknown(x0, y0, z0, x1, y1, z1));
+}
+if (!stuck) hideCube();
+
 // moves on to the next goal once the path is flown and the drone is close enough to its end
 // plain squared distance instead of Math.hypot, whose rounding can differ between browsers
 function updateMission() {
+  // the lidar made it replan: draw the new path
+  if (sim._replan_count() !== replans) {
+    replans = sim._replan_count();
+    drawPath();
+  }
   if (stuck || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
   if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
@@ -133,6 +186,37 @@ function placeDrone(alpha: number) {
   qb.set(now[7], now[8], now[9], now[6]);
   drone.quaternion.slerpQuaternions(qa, qb, alpha);
   shadow.position.set(drone.position.x, drone.position.y, 0.02);
+
+  // the ghost the same way, between the last two estimates
+  ghost.position.set(
+    estPrev[0] + (estNow[0] - estPrev[0]) * alpha,
+    estPrev[1] + (estNow[1] - estPrev[1]) * alpha,
+    estPrev[2] + (estNow[2] - estPrev[2]) * alpha,
+  );
+  qa.set(estPrev[7], estPrev[8], estPrev[9], estPrev[6]);
+  qb.set(estNow[7], estNow[8], estNow[9], estNow[6]);
+  ghost.quaternion.slerpQuaternions(qa, qb, alpha);
+}
+
+// copies the last lidar turn's hits into the dots, only when a new turn came in
+let hitsShown = -1;
+function placeHits() {
+  if (scans === hitsShown) return;
+  hitsShown = scans;
+  const n = sim._hits_len();
+  const pos = hits.geometry.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < 3 * n; i++) pos.array[i] = hitBuf[i];
+  pos.needsUpdate = true;
+  hits.geometry.setDrawRange(0, n);
+}
+
+// one error sample every 100 steps (10 a second of sim time), right after the lidar turn on step 50 of each 100
+let simSteps = 0;
+let scans = 0;
+function afterStep() {
+  simSteps++;
+  if (simSteps % 100 === 50) scans++;
+  if (simSteps % 100 === 0) plot.push(Math.hypot(now[0] - estNow[0], now[1] - estNow[1], now[2] - estNow[2]));
 }
 
 // chase camera eases toward a spot 3 m behind and 1 m above the drone, along its heading
@@ -188,6 +272,7 @@ function frame(t: number) {
     let done = 0;
     while (done < steps && performance.now() - t0 < PHYSICS_BUDGET_MS) {
       sim._advance(1);
+      afterStep();
       updateMission();
       done++;
     }
@@ -197,6 +282,7 @@ function frame(t: number) {
   }
 
   placeDrone(backlog / DT);
+  placeHits();
   placeCameras(frameS);
   renderer.render(scene, camera);
 
@@ -207,7 +293,8 @@ function frame(t: number) {
     const speed = Math.hypot(now[3], now[4], now[5]);
     hud.textContent =
       `${(frames / seconds).toFixed(0)} fps · ${(stepsDone / seconds).toFixed(0)} steps/s · ` +
-      `${(physicsMs / frames).toFixed(2)} ms physics/frame · ${speed.toFixed(1)} m/s · alt ${now[2].toFixed(1)} m`;
+      `${(physicsMs / frames).toFixed(2)} ms physics/frame · ${speed.toFixed(1)} m/s · alt ${now[2].toFixed(1)} m · ` +
+      `${replans} replan${replans === 1 ? '' : 's'}`;
     frames = 0;
     stepsDone = 0;
     physicsMs = 0;

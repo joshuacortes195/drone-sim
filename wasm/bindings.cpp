@@ -1,8 +1,11 @@
 #include <emscripten/emscripten.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "controller.h"
+#include "estimator.h"
+#include "lidar.h"
 #include "map.h"
 #include "planner.h"
 #include "quad.h"
@@ -33,9 +36,62 @@ static const double CRUISE = 5, ACCEL = 3;
 // a city has at most 24 buildings, 5 x 5 lots minus home
 static double box_buf[6 * 24], path_buf[3 * 256];
 
+// the sensors, the estimate the controller flies on (rtk gps, same as results/lidar.md) and the lidar.
+// tick counts physics steps so gps, magnetometer and lidar each run every 100 steps
+static Sensors sn;
+static Estimator est;
+static QuadState e, e_prev;
+static Lidar L;
+static long tick = 0;
+static const unsigned SENSOR_SEED = 1;
+
+// the real world (the city plus boxes the drone hasn't been told about), where it's headed and how often it replanned
+static std::vector<Box> world;
+static Vec3 goal;
+static int replans = 0;
+
+// the last lidar turn's hit points as x y z, 16 beams x 180 steps at most
+static double hit_buf[3 * 16 * 180];
+static int hit_count = 0;
+
 // the last two states packed as p, v, q (w x y z), body rates, rotor speeds, 17 numbers each
-// the page draws the drone part way between them
-static double now_buf[17], prev_buf[17];
+// the page draws the drone part way between them, and the ghost between the last two estimates
+static double now_buf[17], prev_buf[17], est_buf[17], est_prev_buf[17];
+
+// copies the path into the buffer the page draws from. a path too long for it gets dropped
+static void publish_path() {
+  if (path.size() > 256) path.clear();
+  for (size_t i = 0; i < path.size(); i++) {
+    path_buf[3 * i] = path[i].x;
+    path_buf[3 * i + 1] = path[i].y;
+    path_buf[3 * i + 2] = path[i].z;
+  }
+}
+
+// one lidar turn: keeps the hits for the page, adds new obstacles to the map and replans when they cut the path.
+// the same rule as tools/lidar_report.cpp, both call replan() in core
+static void lidar_turn() {
+  std::vector<Vec3> hits = scan(L, sn, s, e, world);
+  hit_count = int(std::min(hits.size(), size_t(16 * 180)));
+  for (int i = 0; i < hit_count; i++) {
+    hit_buf[3 * i] = hits[i].x;
+    hit_buf[3 * i + 1] = hits[i].y;
+    hit_buf[3 * i + 2] = hits[i].z;
+  }
+  size_t known = grown.size();
+  if (add_hits(grid, grown, hits, boxes, e.p) && following && replan(path, grid, grown, known, e.p, goal)) {
+    // no way through, or a path too long to draw: hold where it thinks it is
+    if (path.empty()) path = {e.p};
+    publish_path();
+    if (path.empty()) {
+      path = {e.p};
+      publish_path();
+    }
+    path_yaw = heading(e.q);
+    path_t = 0;
+    replans++;
+  }
+}
 
 // copies a state into one of the buffers above
 static void pack(const QuadState& st, double* out) {
@@ -61,6 +117,19 @@ EMSCRIPTEN_KEEPALIVE void reset(double x, double y, double z, double yaw) {
   prev = s;
   pack(s, now_buf);
   pack(prev, prev_buf);
+
+  // fresh rtk sensors and estimator, the gyro calibrated for 1 s on the pad like the native flights
+  Noise n = rtk();
+  sn = make_sensors(n, SENSOR_SEED);
+  est = make_estimator(s, n);
+  Vec3 gsum;
+  for (int i = 0; i < 1000; i++) gsum = gsum + read_imu(sn, P, s, DT).gyro;
+  est.gyro_bias = gsum * 0.001;
+  e = e_prev = estimate(est);
+  pack(e, est_buf);
+  pack(e, est_prev_buf);
+  tick = 0;
+  hit_count = 0;
 }
 
 // tells the controller where to fly and which way to face, it holds there once it arrives
@@ -75,16 +144,32 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
 // the mission after each step, a big batch is only used to time the pure wasm cost
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
   for (int i = 0; i < steps; i++) {
-    // when flying a path, the setpoint slides along it
-    if (following) {
-      path_t += DT;
-      sp = follow(path, path_t, CRUISE, ACCEL, path_yaw);
+    tick++;
+    // imu every step, gps and magnetometer at 10 Hz
+    predict(est, read_imu(sn, P, s, DT), DT);
+    if (tick % 100 == 0) {
+      gps(est, read_gps(sn, s));
+      mag(est, read_mag(sn, s));
     }
+    e_prev = e;
+    e = estimate(est);
+
+    // lidar at 10 Hz, half a period off the gps. a replan restarts the path clock, otherwise it ticks on
+    int before = replans;
+    if (tick % 100 == 50) lidar_turn();
+    if (following && replans == before) path_t += DT;
+
+    // when flying a path, the setpoint slides along it
+    if (following) sp = follow(path, path_t, CRUISE, ACCEL, path_yaw);
+
+    // the controller flies on the estimate, the physics moves the real drone
     prev = s;
-    s = step(P, s, control(c, P, s, sp, DT), DT);
+    s = step(P, s, control(c, P, e, sp, DT), DT);
   }
   pack(s, now_buf);
   pack(prev, prev_buf);
+  pack(e, est_buf);
+  pack(e_prev, est_prev_buf);
 }
 
 // where the two state buffers sit in wasm memory, so js can read them in place
@@ -101,6 +186,9 @@ EMSCRIPTEN_KEEPALIVE double rotor_pos(int i, int axis) {
 EMSCRIPTEN_KEEPALIVE int new_city(unsigned seed) {
   boxes = city(seed);
   grid = city_grid(boxes);
+  world = boxes;
+  hit_count = 0;
+  replans = 0;
   grown.clear();
   for (size_t i = 0; i < boxes.size(); i++) {
     const Box& b = boxes[i];
@@ -112,24 +200,36 @@ EMSCRIPTEN_KEEPALIVE int new_city(unsigned seed) {
 }
 EMSCRIPTEN_KEEPALIVE double* boxes_ptr() { return box_buf; }
 
-// plans a smoothed path from the drone's spot to the goal and starts flying it.
+// puts a box in the real world that the drone isn't told about, only the lidar can find it
+EMSCRIPTEN_KEEPALIVE void add_box(double x0, double y0, double z0, double x1, double y1, double z1) {
+  world.push_back({{x0, y0, z0}, {x1, y1, z1}});
+}
+
+// plans a smoothed path from where the drone thinks it is to the goal and starts flying it.
 // returns how many waypoints it has, 0 when there's no way there (the drone then just holds)
 EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
-  path = smooth(astar(grid, s.p, {x, y, z}), grown);
-  if (path.size() > 256) path.clear();
-  for (size_t i = 0; i < path.size(); i++) {
-    path_buf[3 * i] = path[i].x;
-    path_buf[3 * i + 1] = path[i].y;
-    path_buf[3 * i + 2] = path[i].z;
-  }
-  // keep facing the way the drone faces now until the path moves sideways
-  Vec3 nose = rotate(s.q, {1, 0, 0});
-  path_yaw = std::atan2(nose.y, nose.x);
+  goal = {x, y, z};
+  path = smooth(astar(grid, e.p, goal), grown);
+  publish_path();
+  // keep facing the way it thinks it faces now until the path moves sideways
+  path_yaw = heading(e.q);
   path_t = 0;
   following = !path.empty();
   return int(path.size());
 }
 EMSCRIPTEN_KEEPALIVE double* path_ptr() { return path_buf; }
+
+// the path after a replan: how many waypoints, and how many replans so far so the page knows to redraw
+EMSCRIPTEN_KEEPALIVE int path_len() { return int(path.size()); }
+EMSCRIPTEN_KEEPALIVE int replan_count() { return replans; }
+
+// the estimate in the same 17 number layout as the state, now and one step back
+EMSCRIPTEN_KEEPALIVE double* est_now() { return est_buf; }
+EMSCRIPTEN_KEEPALIVE double* est_prev() { return est_prev_buf; }
+
+// the last lidar turn's hits, x y z each
+EMSCRIPTEN_KEEPALIVE double* hits_ptr() { return hit_buf; }
+EMSCRIPTEN_KEEPALIVE int hits_len() { return hit_count; }
 
 // true once the setpoint has reached the end of the path
 EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, CRUISE, ACCEL); }
