@@ -27,16 +27,24 @@ std::vector<Vec3> scan(const Lidar& L, Sensors& sn, const QuadState& truth, cons
   return hits;
 }
 
-bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits) {
+bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, const std::vector<Box>& known,
+              Vec3 from) {
   bool added = false;
   for (Vec3 h : hits) {
-    // already blocked means a known building or a spot we've seen before
+    // off the map, or a cell that already has a hit: nothing new
     int i = g.ix(h.x), j = g.iy(h.y), k = g.iz(h.z);
-    if (g.blocked(i, j, k)) continue;
-    // grow the hit's whole cell like a building, so it covers the hit wherever it is in the cell
+    if (!g.inside(i, j, k) || g.has_hit(i, j, k)) continue;
+    // on a building it already knows about, give or take how far a small heading error moves it
+    double tol = kKnownTol + kKnownAngle * norm(h - from);
+    bool on_known = false;
+    for (const Box& b : known) on_known = on_known || segment_hits(h, h, grow(b, tol));
+    if (on_known) continue;
+
+    // grow the whole cell like a building, so it covers the margin of any hit that lands in it
     Vec3 half{g.res / 2, g.res / 2, g.res / 2};
     Box b = grow({g.center(i, j, k) - half, g.center(i, j, k) + half}, kMargin);
     mark(g, b);
+    g.set_hit(i, j, k);
     grown.push_back(b);
     added = true;
   }

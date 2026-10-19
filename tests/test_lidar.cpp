@@ -102,7 +102,7 @@ TEST_CASE("add_hits: known buildings add nothing, a dropped box gets blocked onc
   // only the city it already knows: nothing new
   auto before = g.occ;
   REQUIRE(!scan(L, sn, s, s, boxes).empty());
-  CHECK(!add_hits(g, grown, scan(L, sn, s, s, boxes)));
+  CHECK(!add_hits(g, grown, scan(L, sn, s, s, boxes), boxes, s.p));
   CHECK(g.occ == before);
   CHECK(grown.size() == boxes.size());
 
@@ -111,12 +111,12 @@ TEST_CASE("add_hits: known buildings add nothing, a dropped box gets blocked onc
   auto world = boxes;
   world.push_back(dropped);
   auto hits = scan(L, sn, s, s, world);
-  CHECK(add_hits(g, grown, hits));
+  CHECK(add_hits(g, grown, hits, boxes, s.p));
   CHECK(grown.size() > boxes.size());
   // the cell in front of the face it sees, half the margin out, is blocked now
   CHECK(g.blocked(g.ix(4 - kMargin / 2), g.iy(0.25), g.iz(5.25)));
   // the same hits again add nothing
-  CHECK(!add_hits(g, grown, hits));
+  CHECK(!add_hits(g, grown, hits, boxes, s.p));
 }
 
 TEST_CASE("replan: a dropped box the lidar sees cuts the path, the new path goes around it") {
@@ -140,11 +140,113 @@ TEST_CASE("replan: a dropped box the lidar sees cuts the path, the new path goes
   Sensors sn = make_sensors(rtk(), 5);
   QuadState s = at(start);
   size_t known = grown.size();
-  REQUIRE(add_hits(g, grown, scan(Lidar{}, sn, s, s, world)));
+  REQUIRE(add_hits(g, grown, scan(Lidar{}, sn, s, s, world), boxes, s.p));
   CHECK(path_blocked(path, std::vector<Box>(grown.begin() + long(known), grown.end())));
 
   // planning again on what it knows now stays clear of the real box
   auto again = smooth(astar(g, start, goal), grown);
   REQUIRE(!again.empty());
   CHECK(!path_blocked(again, {grow(dropped, kReach)}));
+}
+
+// distance from a point to the outside of a box, 0 when inside
+static double box_dist(Vec3 p, const Box& b) {
+  double dx = std::max({b.lo.x - p.x, 0.0, p.x - b.hi.x});
+  double dy = std::max({b.lo.y - p.y, 0.0, p.y - b.hi.y});
+  double dz = std::max({b.lo.z - p.z, 0.0, p.z - b.hi.z});
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+TEST_CASE("add_hits: every cell close to the face it saw gets blocked, even where the hits crowd together") {
+  Grid g = city_grid({});
+  std::vector<Box> grown;
+  Sensors sn = make_sensors(quiet(), 1);
+  QuadState s = at({0.25, 0.25, 5.25});
+  // a thin plate 5 m east, 4 m wide and 2 m tall, all inside the beams' 15 deg up and down
+  Box plate{{5, -2, 4.25}, {5.1, 2, 6.25}};
+  Box face{{5, -2, 4.25}, {5, 2, 6.25}};
+  CHECK(add_hits(g, grown, scan(Lidar{}, sn, s, s, {plate}), {}, s.p));
+  // every spot nearly the drone's margin from that face (less 0.15 m for the gaps between hits) has to be
+  // blocked on the grid for a*, and inside one of the grown boxes for smoothing, checked on a 0.1 m lattice
+  int near = 0, off_grid = 0, off_boxes = 0;
+  for (double z = 3; z < 7.5; z += 0.1)
+    for (double y = -3.5; y < 3.5; y += 0.1)
+      for (double x = 3.5; x < 5; x += 0.1) {
+        Vec3 p{x, y, z};
+        if (box_dist(p, face) >= kMargin - 0.15) continue;
+        near++;
+        if (!g.blocked(g.ix(x), g.iy(y), g.iz(z))) off_grid++;
+        bool inside = false;
+        for (const Box& b : grown) inside = inside || box_dist(p, b) == 0;
+        if (!inside) off_boxes++;
+      }
+  CHECK(near > 1000);
+  CHECK(off_grid == 0);
+  CHECK(off_boxes == 0);
+}
+
+TEST_CASE("add_hits: the side of a box seen after its front still gets its own boxes, so a path along it gets cut") {
+  Grid g = city_grid({});
+  std::vector<Box> grown;
+  Sensors sn = make_sensors(quiet(), 1);
+  Box cube{{4, -1, 4.25}, {6, 1, 6.25}};
+  // first from straight in front, then from 1.5 m off its south side
+  add_hits(g, grown, scan(Lidar{}, sn, at({0.25, 0.25, 5.25}), at({0.25, 0.25, 5.25}), {cube}), {}, Vec3{0.25, 0.25, 5.25});
+  size_t before = grown.size();
+  QuadState side = at({5, -2.5, 5.25});
+  CHECK(add_hits(g, grown, scan(Lidar{}, sn, side, side, {cube}), {}, side.p));
+  std::vector<Box> fresh(grown.begin() + long(before), grown.end());
+  // a path 0.2 m off the south face only shows up as blocked against the new boxes
+  CHECK(path_blocked({{3.5, -1.2, 5.25}, {6.5, -1.2, 5.25}}, fresh));
+
+  // the strip of the south face the beams reach from there, 15 deg up and down over 1.5 m
+  Box strip{{4, -1, 5.25 - 0.35}, {6, -1, 5.25 + 0.35}};
+  int near = 0, off_boxes = 0;
+  for (double z = 4; z < 6.5; z += 0.1)
+    for (double y = -2; y < -1; y += 0.1)
+      for (double x = 3; x < 7; x += 0.1) {
+        Vec3 p{x, y, z};
+        if (box_dist(p, strip) >= kMargin - 0.15) continue;
+        near++;
+        bool inside = false;
+        for (const Box& b : grown) inside = inside || box_dist(p, b) == 0;
+        if (!inside) off_boxes++;
+      }
+  CHECK(near > 500);
+  CHECK(off_boxes == 0);
+}
+
+TEST_CASE("add_hits: a heading error smears far hits off known buildings, they still count as known") {
+  auto boxes = city(3);
+  Grid g = city_grid(boxes);
+  std::vector<Box> grown;
+  for (const Box& b : boxes) grown.push_back(grow(b, kMargin));
+  Sensors sn = make_sensors(quiet(), 1);
+  QuadState truth = at({0.25, 0.25, 5.25});
+  // the estimate's heading is 0.025 rad off, about the worst the rtk flights had
+  QuadState est = truth;
+  est.q = axis_angle({0, 0, 1}, 0.025);
+  auto hits = scan(Lidar{}, sn, truth, est, boxes);
+  // some hits really are pushed well off their walls
+  double off = 0;
+  for (Vec3 h : hits) {
+    double d = 1e9;
+    for (const Box& b : boxes) d = std::min(d, box_dist(h, b));
+    off = std::max(off, d);
+  }
+  CHECK(off > 0.3);
+  auto before = g.occ;
+  CHECK(!add_hits(g, grown, hits, boxes, est.p));
+  CHECK(g.occ == before);
+}
+
+TEST_CASE("add_hits: a new box about a meter off a known building, seen from close, is not taken for the building") {
+  Grid g = city_grid({});
+  std::vector<Box> grown;
+  Sensors sn = make_sensors(quiet(), 1);
+  QuadState s = at({0.25, 0.25, 5.25});
+  // a known building 5 m east, and a small new box in front of its corner, the face the drone sees
+  // 1.1 to 1.4 m from the building. the tolerance at 4 m is 0.22 m, so all of it is new
+  Box known{{5, 1, 0}, {7, 4, 10}}, fresh{{4, 0, 4.75}, {4.5, 0.5, 5.75}};
+  CHECK(add_hits(g, grown, scan(Lidar{}, sn, s, s, {known, fresh}), {known}, s.p));
 }

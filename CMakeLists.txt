@@ -47,6 +47,11 @@ if(NOT EMSCRIPTEN)
   add_executable(plan_report tools/plan_report.cpp)
   target_compile_options(plan_report PRIVATE ${WARN_FLAGS})
   target_link_libraries(plan_report PRIVATE core)
+
+  # flies past a box the drone doesn't know about, with and without the lidar, for results/lidar.md
+  add_executable(lidar_report tools/lidar_report.cpp)
+  target_compile_options(lidar_report PRIVATE ${WARN_FLAGS})
+  target_link_libraries(lidar_report PRIVATE core)
 endif()
 
 # browser build: the core plus the bindings, written straight into the web app as an es module and a .wasm file

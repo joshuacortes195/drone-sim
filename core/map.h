@@ -38,7 +38,13 @@ struct Grid {
   bool inside(int i, int j, int k) const { return i >= 0 && j >= 0 && k >= 0 && i < nx && j < ny && k < nz; }
   // anything off the grid counts as blocked so paths stay on the map
   bool blocked(int i, int j, int k) const { return !inside(i, j, k) || occ[(size_t(k) * ny + j) * nx + i]; }
-  void block(int i, int j, int k) { occ[(size_t(k) * ny + j) * nx + i] = 1; }
+  void block(int i, int j, int k) {
+    uint8_t& c = occ[(size_t(k) * ny + j) * nx + i];
+    if (!c) c = 1;
+  }
+  // a cell with a lidar hit in it is 2 instead of 1, so the same spot doesn't get added twice
+  bool has_hit(int i, int j, int k) const { return occ[(size_t(k) * ny + j) * nx + i] == 2; }
+  void set_hit(int i, int j, int k) { occ[(size_t(k) * ny + j) * nx + i] = 2; }
   Vec3 center(int i, int j, int k) const { return origin + Vec3{i + 0.5, j + 0.5, k + 0.5} * res; }
   // which cell a world point falls in
   int ix(double x) const { return int(std::floor((x - origin.x) / res)); }

@@ -20,6 +20,14 @@ struct Lidar {
 std::vector<Vec3> scan(const Lidar& L, Sensors& sn, const QuadState& truth, const QuadState& est,
                        const std::vector<Box>& world);
 
-// blocks the cells around every hit that isn't already blocked, and adds each one to grown as a box
-// for smoothing and replanning. true when anything new turned up
-bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits);
+// how close a hit has to be to a known building to count as that building: 0.1 m, over 3x the lidar's 3 cm
+// noise, plus 0.03 m per meter away, since a heading error moves a hit sideways by range times the angle.
+// 0.03 rad is just over the worst attitude error measured on the rtk flights (0.027 rad, results/lidar.md)
+constexpr double kKnownTol = 0.1, kKnownAngle = 0.03;
+
+// adds what the lidar saw to what the drone knows. hits on known buildings are skipped, and so are hits in a
+// cell that already has one. every other hit's cell gets grown by the drone's margin, blocked on the grid and
+// added to grown as a box for smoothing and replanning. from is where the drone thinks it is.
+// true when anything new turned up
+bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, const std::vector<Box>& known,
+              Vec3 from);

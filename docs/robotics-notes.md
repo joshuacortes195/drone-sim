@@ -361,3 +361,40 @@ Interview questions:
 - Your filter cut the GPS error 5x. Why did the drone still hit buildings?
 - How would you size an obstacle margin from estimation error?
 - What does RTK do differently from regular GPS?
+
+## Lidar: raycasting against boxes
+
+A lidar spins a laser and times each pulse's bounce, which gives the distance to the first thing in that direction. To fake one I shoot a ray from the drone and find the nearest box face it goes into. I already had the slab test from phase 4: a box is where three pairs of parallel walls overlap, so I work out when the ray is between each pair and keep the part where all three overlap. The start of that overlap is the distance. I model a Velodyne VLP-16: 16 beams from 15 degrees down to 15 degrees up, all the way around, 10 times a second, with 3 cm of range noise.
+
+One detail I like: the range comes from where the drone really is, because that's physics, but the drone places the hit using where it thinks it is. With RTK that's about a centimeter off in position, but the attitude estimate is off by up to 0.027 rad, and that moves a hit 30 m away by 0.8 m. So far hits are smeared, and the code has to expect it.
+
+Where it lives: `ray_box()` and the shared `slab()` in `core/map.cpp`, `scan()` in `core/lidar.cpp`, the data sheet values in `results/lidar.md`.
+
+Interview questions:
+- Why does the slab test work, and what happens with a ray parallel to a face?
+- How would you make this fast with thousands of objects?
+- Why use the true pose for the range and the estimate for placing the hit?
+
+## Turning hits into a map
+
+The planner thinks in cells, with every obstacle grown by the drone's margin so the drone can be a dot. So each hit has to become blocked cells, and also a box, because smoothing and the replan check work on boxes. My first version skipped any hit whose cell was already blocked. That sounded smart but it was wrong: a cell can be blocked just because it's inside the margin of a neighboring hit, and then the side of a box seen after its front never turned into boxes. The drone flew within 1 cm of a box without noticing. Now there's one box per cell that has a hit, that cell grown by the full margin, which covers every hit inside it.
+
+Hits on buildings the drone already knows have to be thrown out, or they'd pile up as fake obstacles. A hit counts as a known building if it's within 0.1 m plus 0.03 m per meter of range, since attitude error grows with distance. Without the range part, fake obstacles blocked the goal on 20 of 200 flights.
+
+Where it lives: `add_hits()` in `core/lidar.cpp`, the hit flag in `Grid` in `core/map.h`.
+
+Interview questions:
+- Occupancy grid or a list of obstacles, and why do you keep both?
+- How do you tell a new obstacle from a known one with a noisy pose?
+- What breaks if you inflate a hit point instead of its cell?
+
+## Replanning when the lidar sees something
+
+Replanning every scan would waste time, so the drone only replans when the boxes from this scan cut the path it's flying. Then it plans from the estimate to the same goal. If it's already inside the margin of something it just saw, its own cell is blocked, so A* now starts from the closest free cell within 2 m. Across 200 trips with an unknown cube dropped on the path, the blind drone hit the cube every time. With the lidar none of them did, all 200 reached the goal, and the worst one came 0.112 m from the cube. That one was diving at 57 degrees, steeper than the lidar can look down.
+
+Where it lives: `tools/lidar_report.cpp`, the blocked start in `astar()` in `core/planner.cpp`, the numbers in `results/lidar.md`.
+
+Interview questions:
+- When do you replan, and how do you avoid replanning all the time?
+- What happens when the new obstacle closes off every way through?
+- What are the blind spots of a 16 beam lidar on a drone, and how would you cover them?
