@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <utility>
 
@@ -57,11 +58,10 @@ Grid city_grid(const std::vector<Box>& boxes) {
   return g;
 }
 
-bool segment_hits(Vec3 a, Vec3 b, const Box& box) {
-  // walk the segment as a + t (b - a) for t from 0 to 1, and squeeze that range one axis at a time
-  // down to the part that's between the box's two faces on that axis
-  double t0 = 0, t1 = 1;
-  double from[3] = {a.x, a.y, a.z}, d[3] = {b.x - a.x, b.y - a.y, b.z - a.z};
+// the slab test: walk the line as a + t d for t from t0 to t1, and squeeze that range one axis at a time
+// down to the part that's between the box's two faces on that axis. t0 ends up where it goes in
+static bool slab(Vec3 a, Vec3 dir, const Box& box, double& t0, double& t1) {
+  double from[3] = {a.x, a.y, a.z}, d[3] = {dir.x, dir.y, dir.z};
   double lo[3] = {box.lo.x, box.lo.y, box.lo.z}, hi[3] = {box.hi.x, box.hi.y, box.hi.z};
   for (int i = 0; i < 3; i++) {
     if (d[i] == 0) {
@@ -76,4 +76,15 @@ bool segment_hits(Vec3 a, Vec3 b, const Box& box) {
     if (t0 > t1) return false;  // the inside parts of two axes don't overlap, so it misses
   }
   return true;
+}
+
+bool segment_hits(Vec3 a, Vec3 b, const Box& box) {
+  double t0 = 0, t1 = 1;
+  return slab(a, b - a, box, t0, t1);
+}
+
+double ray_box(Vec3 from, Vec3 dir, double range, const Box& box) {
+  // same squeeze over 0 to range meters, the distance is wherever it goes in
+  double t0 = 0, t1 = range;
+  return slab(from, dir, box, t0, t1) ? t0 : std::numeric_limits<double>::infinity();
 }

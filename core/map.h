@@ -54,3 +54,7 @@ Grid city_grid(const std::vector<Box>& boxes);
 
 // true when the straight segment from a to b touches the box (slab test)
 bool segment_hits(Vec3 a, Vec3 b, const Box& box);
+
+// how far along a unit direction a ray goes before it enters the box, infinity if it doesn't within range.
+// 0 when it starts inside
+double ray_box(Vec3 from, Vec3 dir, double range, const Box& box);

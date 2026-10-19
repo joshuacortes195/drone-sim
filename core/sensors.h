@@ -15,6 +15,7 @@ struct Noise {
   double gyro_walk = 3.88e-5;          // rad/s^2 per sqrt(Hz), same for the gyro
   double gps_xy = 2.12, gps_z = 4.24;  // m per axis, 2.5 m cep50 / 1.1774, vertical twice that like px4 sitl
   double mag = 0.015;                  // rad of heading, 0.3 uT over a 20 uT horizontal field
+  double lidar = 0.03;                 // m of range, vlp-16 "up to 3 cm typical", taken as the spread
 };
 
 // every noise and bias set to zero, the sensors read the truth
@@ -47,3 +48,6 @@ double read_mag(Sensors& sn, const QuadState& s);
 // the same imu and magnetometer with an rtk gps instead (u-blox zed-f9p): 0.01 m + 1 ppm cep horizontal
 // and median vertical on a 1 km baseline, 10 Hz with gps + glonass + galileo
 Noise rtk();
+
+// a bell curve random number with spread 1, the same in the browser and native builds
+double gauss(std::mt19937& rng);

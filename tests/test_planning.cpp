@@ -214,7 +214,26 @@ TEST_CASE("astar: no path when the goal is walled off or blocked") {
         if (i != 7 || j != 7 || k != 7) g.block(i, j, k);
   CHECK(astar(g, g.center(0, 0, 0), g.center(7, 7, 7)).empty());
   CHECK(astar(g, g.center(0, 0, 0), g.center(6, 6, 6)).empty());
-  CHECK(astar(g, g.center(6, 6, 6), g.center(0, 0, 0)).empty());
+}
+
+TEST_CASE("astar: a blocked start plans from the nearest free cell, but not from deep inside a wall") {
+  Grid g = open_grid(12, 12, 12);
+  // a solid 3 x 3 x 3 block around cell 5, 5, 5
+  for (int i = 4; i <= 6; i++)
+    for (int j = 4; j <= 6; j++)
+      for (int k = 4; k <= 6; k++) g.block(i, j, k);
+  auto path = astar(g, g.center(5, 5, 5), g.center(11, 11, 11));
+  REQUIRE(!path.empty());
+  // the closest free cells are the face neighbors two cells out, 1 m away
+  CHECK(!g.blocked(g.ix(path[0].x), g.iy(path[0].y), g.iz(path[0].z)));
+  CHECK(std::abs(norm(path[0] - g.center(5, 5, 5)) - 1.0) < 1e-9);
+
+  // the closest free cell is 5 cells out, one past the 4 it looks, so no path
+  Grid deep = open_grid(20, 20, 20);
+  for (int i = 6; i <= 14; i++)
+    for (int j = 6; j <= 14; j++)
+      for (int k = 6; k <= 14; k++) deep.block(i, j, k);
+  CHECK(astar(deep, deep.center(10, 10, 10), deep.center(0, 0, 0)).empty());
 }
 
 TEST_CASE("segment_hits: through, over, short of, inside and past the corner of a box") {

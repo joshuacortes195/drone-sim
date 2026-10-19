@@ -10,7 +10,25 @@
 std::vector<Vec3> astar(const Grid& g, Vec3 start, Vec3 goal) {
   int si = g.ix(start.x), sj = g.iy(start.y), sk = g.iz(start.z);
   int gi = g.ix(goal.x), gj = g.iy(goal.y), gk = g.iz(goal.z);
-  if (g.blocked(si, sj, sk) || g.blocked(gi, gj, gk)) return {};
+  if (g.blocked(gi, gj, gk)) return {};
+
+  // the drone can end up inside a margin it only just saw, so start from the closest free cell,
+  // looking one shell of cells further out at a time, up to 4 cells (2 m) away
+  if (g.blocked(si, sj, sk)) {
+    double best = std::numeric_limits<double>::infinity();
+    int bi = 0, bj = 0, bk = 0;
+    for (int r = 1; r <= 4 && std::isinf(best); r++)
+      for (int dk = -r; dk <= r; dk++)
+        for (int dj = -r; dj <= r; dj++)
+          for (int di = -r; di <= r; di++) {
+            if (std::max({std::abs(di), std::abs(dj), std::abs(dk)}) != r) continue;  // only this shell
+            if (g.blocked(si + di, sj + dj, sk + dk)) continue;
+            double d = norm(g.center(si + di, sj + dj, sk + dk) - start);
+            if (d < best) best = d, bi = si + di, bj = sj + dj, bk = sk + dk;
+          }
+    if (std::isinf(best)) return {};
+    si = bi, sj = bj, sk = bk;
+  }
 
   // cells are numbered flat, same order as the occupancy list
   auto id = [&](int i, int j, int k) { return (k * g.ny + j) * g.nx + i; };

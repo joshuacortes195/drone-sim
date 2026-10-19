@@ -4,7 +4,7 @@
 
 // a bell curve random number with spread 1. built by hand from raw mt19937 draws (box muller)
 // because the std distributions give different numbers on msvc and in the browser build
-static double gauss(std::mt19937& rng) {
+double gauss(std::mt19937& rng) {
   double u1 = (rng() + 1.0) / 4294967296.0;  // (0, 1], never 0 so the log is safe
   double u2 = rng() / 4294967296.0;
   return std::sqrt(-2 * std::log(u1)) * std::cos(2 * 3.14159265358979323846 * u2);
@@ -20,7 +20,7 @@ Noise quiet() {
   Noise n;
   n.accel_density = {0, 0, 0};
   n.gyro_density = n.accel_bias0 = n.gyro_bias0 = n.accel_walk = n.gyro_walk = 0;
-  n.gps_xy = n.gps_z = n.mag = 0;
+  n.gps_xy = n.gps_z = n.mag = n.lidar = 0;
   return n;
 }
 
