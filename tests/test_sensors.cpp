@@ -29,6 +29,19 @@ TEST_CASE("a perfect accelerometer reads 9.81 up in hover and zero in free fall"
   CHECK(norm(fall.accel) == doctest::Approx(0).epsilon(1e-12));
 }
 
+TEST_CASE("a perfect accelerometer feels the wind: sitting still in a breeze, rotor drag pushes it downwind") {
+  Sensors sn = perfect();
+  QuadState s;
+  double w = hover_speed();
+  s.rotor = {w, w, w, w};
+  // 6 m/s from the west and 2 from the north, four rotors' drag is 4 k w per m/s of wind
+  Imu m = read_imu(sn, P, s, 0.001, {6, -2, 0});
+  double k = 4 * P.rotor_drag * w / P.mass;
+  CHECK(std::abs(m.accel.x - k * 6) < 1e-9);
+  CHECK(std::abs(m.accel.y - k * -2) < 1e-9);
+  CHECK(std::abs(m.accel.z - 9.81) < 1e-9);
+}
+
 TEST_CASE("a perfect accelerometer reads in the body frame, tipped 90 degrees thrust still reads along body z") {
   // nose pitched straight down (rotated +90 about y), rotors at hover: thrust points along world +x
   Sensors sn = perfect();

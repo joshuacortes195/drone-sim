@@ -35,13 +35,13 @@ Sensors make_sensors(const Noise& n, unsigned seed) {
   return sn;
 }
 
-Imu read_imu(Sensors& sn, const QuadParams& P, const QuadState& s, double dt) {
+Imu read_imu(Sensors& sn, const QuadParams& P, const QuadState& s, double dt, Vec3 wind) {
   const Noise& n = sn.n;
   // noise per sample grows as samples get closer together: density / sqrt(dt)
   double per = 1 / std::sqrt(dt);
   double g = n.gyro_density * per;
-  // the accelerometer feels thrust and rotor drag but never gravity
-  Vec3 accel = wrench(P, s).force * (1 / P.mass) + sn.accel_bias + gauss3(sn.rng, n.accel_density * per);
+  // the accelerometer feels thrust and rotor drag (wind included) but never gravity
+  Vec3 accel = wrench(P, s, wind).force * (1 / P.mass) + sn.accel_bias + gauss3(sn.rng, n.accel_density * per);
   Vec3 gyro = s.w + sn.gyro_bias + gauss3(sn.rng, {g, g, g});
   // the biases wander a little every sample, a random walk: walk * sqrt(dt) per step
   double aw = n.accel_walk * std::sqrt(dt), gw = n.gyro_walk * std::sqrt(dt);

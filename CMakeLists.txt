@@ -52,6 +52,11 @@ if(NOT EMSCRIPTEN)
   add_executable(lidar_report tools/lidar_report.cpp)
   target_compile_options(lidar_report PRIVATE ${WARN_FLAGS})
   target_link_libraries(lidar_report PRIVATE core)
+
+  # hovers in breezes and gusts on the truth, rtk and the everyday gps for results/wind.md
+  add_executable(wind_report tools/wind_report.cpp)
+  target_compile_options(wind_report PRIVATE ${WARN_FLAGS})
+  target_link_libraries(wind_report PRIVATE core)
 endif()
 
 # browser build: the core plus the bindings, written straight into the web app as an es module and a .wasm file

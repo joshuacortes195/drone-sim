@@ -36,8 +36,9 @@ struct Imu {
   Vec3 accel, gyro;
 };
 
-// reads the imu, dt is the time since the last read and sets how far the biases wander
-Imu read_imu(Sensors& sn, const QuadParams& P, const QuadState& s, double dt);
+// reads the imu, dt is the time since the last read and sets how far the biases wander.
+// wind is the air the drone is flying through, its drag is a real force the accelerometer feels
+Imu read_imu(Sensors& sn, const QuadParams& P, const QuadState& s, double dt, Vec3 wind = {});
 
 // a noisy world position from the gps
 Vec3 read_gps(Sensors& sn, const QuadState& s);
