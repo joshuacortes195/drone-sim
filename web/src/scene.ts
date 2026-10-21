@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { Drone } from './wasm/drone';
 
-// sky, light, ground grid and the buildings. boxes holds 6 numbers per building: low x y z, high x y z
+// sky, light, ground grid and the buildings. boxes holds 6 numbers per building: low x y z, high x y z.
+// hands back the ground and buildings so a tap can find what it landed on
 export function buildWorld(scene: THREE.Scene, boxes: Float64Array) {
+  const pickable: THREE.Mesh[] = [];
   // pale sky with fog so far away things fade out
   scene.background = new THREE.Color(0xcfd8e3);
   scene.fog = new THREE.Fog(0xcfd8e3, 60, 180);
@@ -16,6 +18,7 @@ export function buildWorld(scene: THREE.Scene, boxes: Float64Array) {
   // flat ground with a 2 m grid on it, the grid helper is built flat in xz so it gets turned to lie in xy
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0xa9b29a }));
   scene.add(ground);
+  pickable.push(ground);
   const grid = new THREE.GridHelper(200, 100, 0x7c8570, 0x939c86);
   grid.rotation.x = Math.PI / 2;
   grid.position.z = 0.01;
@@ -28,7 +31,9 @@ export function buildWorld(scene: THREE.Scene, boxes: Float64Array) {
     const box = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), boxMat);
     box.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
     scene.add(box);
+    pickable.push(box);
   }
+  return pickable;
 }
 
 // the quad: a body, an arm out to each rotor and a disc for each rotor, all at the physics' rotor positions

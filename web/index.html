@@ -12,7 +12,7 @@
       canvas { display: block; }
       /* styling for the readout and camera button in the top left corner */
       .bar {
-        position: fixed; top: 8px; left: 8px; right: 8px;
+        position: fixed; top: 8px; left: 8px; right: 264px;
         display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
         font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
       }
@@ -30,6 +30,42 @@
       .key i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
       .key i.dot { width: 6px; height: 6px; border-radius: 50%; vertical-align: 1px; }
       .key i.box { background: rgba(135, 150, 168, 0.35); outline: 1px solid #1d2733; outline-offset: -1px; }
+      /* styling for the controls panel in the top right corner */
+      .controls {
+        position: fixed; top: 8px; right: 8px; width: 240px; box-sizing: border-box;
+        padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.85);
+        font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
+      }
+      .controls header { display: flex; align-items: center; }
+      .controls h1 { flex: 1; margin: 0; font-size: 12px; font-weight: 600; }
+      .controls .body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+      .controls button { font: inherit; color: #1d2733; background: #fff; border: 1px solid #9aa7b6; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+      .controls label { display: flex; flex-direction: column; gap: 2px; }
+      .controls input[type='range'] { accent-color: #2a9d8f; margin: 0; }
+      /* the two checkboxes sit beside their text */
+      .controls label.check { flex-direction: row; align-items: flex-start; gap: 6px; }
+      .controls label.check input { margin: 2px 0 0; accent-color: #2a9d8f; }
+      /* goal or box buttons side by side, the picked one filled in */
+      .controls fieldset { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; }
+      .controls legend { padding: 0; margin-bottom: 4px; }
+      .controls button[aria-pressed='true'] { background: #2a9d8f; border-color: #2a9d8f; color: #fff; }
+      /* the wind arrow and its speed */
+      .wind { display: flex; align-items: center; gap: 6px; }
+      .wind svg { fill: #1d2733; }
+      .wind .ring { fill: none; stroke: #9aa7b6; }
+      .status { margin: 8px 0 0; color: #5b6776; }
+      /* red banner across the top when the drone hits something */
+      .crash {
+        position: fixed; top: 48px; left: 50%; transform: translateX(-50%);
+        padding: 8px 14px; border-radius: 8px; background: #b3261e; color: #fff;
+        font: 600 14px/1.4 ui-monospace, Menlo, monospace;
+      }
+      .crash button { margin-left: 10px; font: inherit; color: #b3261e; background: #fff; border: 0; border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+      /* on a narrow screen the readout gets the full width and the controls drop below it */
+      @media (max-width: 700px) {
+        .bar { right: 8px; }
+        .controls { top: 96px; }
+      }
     </style>
   </head>
   <body>
@@ -37,6 +73,7 @@
       <button id="cam">top down view (c)</button>
       <span id="hud">loading</span>
     </div>
+    <div id="controls"></div>
     <div class="panel">
       <canvas id="plot" role="img" aria-label="estimate error plot, waiting for data"></canvas>
       <div class="key">

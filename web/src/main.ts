@@ -1,5 +1,9 @@
 import * as THREE from 'three';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import createDrone from './wasm/drone.js';
+import { Panel, type Actions, type TapMode } from './Panel';
+import { setReadout } from './store';
 import { buildPlot } from './plot';
 import {
   buildDrone,
@@ -51,6 +55,8 @@ const estPrev = new Float64Array(sim.HEAPF64.buffer, sim._est_prev(), 17);
 // the last lidar turn's hit points, 16 beams x 180 steps at most
 const MAX_HITS = 16 * 180;
 const hitBuf = new Float64Array(sim.HEAPF64.buffer, sim._hits_ptr(), 3 * MAX_HITS);
+// the wind the drone feels right now, x y z
+const windBuf = new Float64Array(sim.HEAPF64.buffer, sim._wind_now(), 3);
 
 // renderer filling the window
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -60,7 +66,7 @@ document.body.appendChild(renderer.domElement);
 
 // the world, the drone, its ground shadow, the target marker and the map view arrow
 const scene = new THREE.Scene();
-buildWorld(scene, boxes);
+const worldMeshes = buildWorld(scene, boxes);
 const drone = buildDrone(sim);
 const pathLine = buildPath();
 const shadow = buildShadow();
@@ -119,6 +125,10 @@ let planMs = 0;
 let pathEnd = [0, 0, 0];
 let stuck = false;
 let replans = 0;
+// true while it flies the built in tour, a goal picked by tapping turns it off until reset
+let demo = true;
+// the goal it's flying to right now, so a tap it can't reach can put it back on course
+let goal = GOALS[0];
 
 // draws the path the wasm side is flying and remembers where it ends
 function drawPath() {
@@ -137,6 +147,7 @@ function goTo(i: number) {
     if (n === 0) continue;
     drawPath();
     target.position.set(x, y, z);
+    goal = GOALS[i];
     leg = i;
     return;
   }
@@ -147,6 +158,7 @@ goTo(leg);
 // picks a spot for a 2 m cube on the middle of the first path's longest leg, like tools/lidar_report.cpp.
 // the drone isn't told about it, so the lidar has to find it and it has to replan
 let cube: number[] | null = null;
+let cubeMesh: THREE.Mesh | null = null;
 function hideCube() {
   const n = sim._path_len();
   const pts = new Float64Array(sim.HEAPF64.buffer, sim._path_ptr(), 3 * n);
@@ -168,7 +180,8 @@ function dropCube() {
   if (!cube || Math.hypot(now[3], now[4], now[5]) < 2) return;
   const [x0, y0, z0, x1, y1, z1] = cube;
   sim._add_box(x0, y0, z0, x1, y1, z1);
-  scene.add(buildUnknown(x0, y0, z0, x1, y1, z1));
+  cubeMesh = buildUnknown(x0, y0, z0, x1, y1, z1);
+  scene.add(cubeMesh);
   cube = null;
 }
 
@@ -186,7 +199,7 @@ function updateMission() {
   }
   // a hold after a failed replan is one point, so it counts as done right away and the loop moves to the next goal.
   // natively (lidar_report) the drone just stays holding
-  if (stuck || !sim._path_done()) return;
+  if (stuck || !demo || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
   if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
 }
@@ -270,6 +283,119 @@ function placeCameras(frameS: number) {
   top.lookAt(drone.position);
 }
 
+// goals and boxes from a tap. goals sit 3 m over the ground or 2 m over a roof, under the planner's 20 m ceiling
+const GOAL_OVER_GROUND = 3, GOAL_OVER_ROOF = 2, GOAL_MAX_Z = 18;
+// the planning grid only covers 30 m out from home
+const AREA_M = 29;
+let tapMode: TapMode = 'goal';
+let noisyGps = false;
+// boxes dropped by tapping, so a tap can land on them and reset can take them away
+const dropped: THREE.Mesh[] = [];
+
+// sends the drone to a tapped spot and stops the tour. if it can't get there it goes back to what it was doing
+function sendTo(x: number, y: number, z: number) {
+  const t0 = performance.now();
+  const n = sim._fly_to(x, y, z);
+  planMs = performance.now() - t0;
+  if (n === 0) {
+    // a failed plan leaves the drone holding, so plan the old goal again
+    sim._fly_to(goal[0], goal[1], goal[2]);
+    drawPath();
+    setReadout({ note: "can't find a way there, try another spot" });
+    return;
+  }
+  goal = [x, y, z];
+  demo = false;
+  stuck = false;
+  // the tour's hidden cube would drop in on a path nobody is flying any more
+  cube = null;
+  drawPath();
+  target.position.set(x, y, z);
+  setReadout({ demo: false, note: '' });
+}
+
+// drops a 2 m cube where the tap landed: on top of a roof or the ground, or up against a wall.
+// the drone isn't told, so its lidar has to find it
+function dropBox(p: THREE.Vector3, normal: THREE.Vector3) {
+  let cx = p.x, cy = p.y, z0 = p.z;
+  if (normal.z < 0.5) {
+    cx += normal.x;
+    cy += normal.y;
+    z0 = Math.max(0, p.z - 1);
+  }
+  const b = [cx - 1, cy - 1, z0, cx + 1, cy + 1, z0 + 2] as const;
+  if (!sim._add_box(...b)) {
+    setReadout({ note: 'too close to the drone, drop it further away' });
+    return;
+  }
+  const mesh = buildUnknown(...b);
+  scene.add(mesh);
+  dropped.push(mesh);
+  setReadout({ note: '' });
+}
+
+// turns a click or tap on the 3d view into a goal or a box, by casting a ray from the camera through that pixel
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+function onTap(e: MouseEvent) {
+  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects([...worldMeshes, ...dropped], false)[0];
+  if (!hit || !hit.face) return;
+  const p = hit.point;
+  if (Math.abs(p.x) > AREA_M || Math.abs(p.y) > AREA_M) {
+    setReadout({ note: 'outside the flying area, tap closer in' });
+    return;
+  }
+  if (tapMode === 'box') {
+    dropBox(p, hit.face.normal);
+    return;
+  }
+  // over the roof if it landed on top of something, otherwise over the ground
+  const z = p.z > 0.1 && hit.face.normal.z > 0.5 ? p.z + GOAL_OVER_ROOF : GOAL_OVER_GROUND;
+  sendTo(p.x, p.y, Math.min(z, GOAL_MAX_Z));
+}
+renderer.domElement.addEventListener('click', onTap);
+
+// starts everything over like a fresh page load, keeping the wind and toggles the panel has set
+function resetAll() {
+  // a fresh city clears dropped boxes, lidar finds and the replan count
+  sim._new_city(SEED);
+  sim._reset(0, 0, 1.5, 0);
+  // reset brings back the rtk gps, so put the panel's choice back
+  sim._set_noisy_gps(noisyGps ? 1 : 0);
+  for (const m of dropped) scene.remove(m);
+  dropped.length = 0;
+  if (cubeMesh) scene.remove(cubeMesh);
+  cubeMesh = null;
+  replans = 0;
+  hitsShown = -1;
+  errSum = 0;
+  backlog = 0;
+  oldPath.visible = false;
+  plot.clear();
+  demo = true;
+  stuck = false;
+  goTo(0);
+  if (!stuck) hideCube();
+  setReadout({ crashed: false, demo: true, note: '' });
+}
+
+// what the panel's controls do to the sim
+const actions: Actions = {
+  setWind: (breeze, gusts) => sim._set_wind(breeze, gusts),
+  setNoisyGps: (on) => {
+    noisyGps = on;
+    sim._set_noisy_gps(on ? 1 : 0);
+  },
+  setTruth: (on) => sim._set_truth(on ? 1 : 0),
+  setTapMode: (mode) => {
+    tapMode = mode;
+  },
+  reset: resetAll,
+};
+createRoot(document.getElementById('controls')!).render(createElement(Panel, { actions }));
+
 // numbers for the readout, reset every half second
 const hud = document.getElementById('hud') as HTMLElement;
 let frames = 0;
@@ -280,6 +406,8 @@ let windowStart = performance.now();
 // real time that has passed but hasn't been simulated yet
 let backlog = 0;
 let last = performance.now();
+// whether the crash banner is up, so the store only hears about changes
+let wasCrashed = false;
 
 // runs once per screen refresh: catch the physics up in fixed 1 ms steps, then draw in between the last two
 function frame(t: number) {
@@ -308,6 +436,13 @@ function frame(t: number) {
     stepsDone += done;
   }
 
+  // the banner shows as soon as the sim says it hit something
+  const crashed = sim._is_crashed() === 1;
+  if (crashed !== wasCrashed) {
+    wasCrashed = crashed;
+    setReadout({ crashed });
+  }
+
   placeDrone(backlog / DT);
   placeHits();
   placeCameras(frameS);
@@ -322,6 +457,7 @@ function frame(t: number) {
       `${(frames / seconds).toFixed(0)} fps · ${(stepsDone / seconds).toFixed(0)} steps/s · ` +
       `${(physicsMs / frames).toFixed(2)} ms physics/frame · ${speed.toFixed(1)} m/s · alt ${now[2].toFixed(1)} m · ` +
       `${replans} replan${replans === 1 ? '' : 's'}`;
+    setReadout({ windX: windBuf[0], windY: windBuf[1], windZ: windBuf[2] });
     frames = 0;
     stepsDone = 0;
     physicsMs = 0;

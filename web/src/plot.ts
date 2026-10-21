@@ -132,6 +132,12 @@ export function buildPlot(canvas: HTMLCanvasElement) {
     draw();
   }
 
+  // empties the plot, used when the page resets
+  function clear() {
+    data.length = 0;
+    draw();
+  }
+
   draw();
-  return { push };
+  return { push, clear };
 }

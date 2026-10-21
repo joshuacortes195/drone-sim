@@ -21,6 +21,11 @@ export interface Drone {
   _hits_ptr(): number;
   _hits_len(): number;
   _sim_tick(): number;
+  _set_wind(breeze: number, gusts: number): void;
+  _wind_now(): number;
+  _set_noisy_gps(on: number): void;
+  _set_truth(on: number): void;
+  _is_crashed(): number;
 }
 
 // loads the .wasm file and resolves once the module is ready
