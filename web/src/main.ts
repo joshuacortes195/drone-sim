@@ -179,10 +179,11 @@ if (!stuck) hideCube();
 function dropCube() {
   if (!cube || Math.hypot(now[3], now[4], now[5]) < 2) return;
   const [x0, y0, z0, x1, y1, z1] = cube;
-  sim._add_box(x0, y0, z0, x1, y1, z1);
+  cube = null;
+  // only shown if the sim took it, a box right next to the drone gets refused
+  if (!sim._add_box(x0, y0, z0, x1, y1, z1)) return;
   cubeMesh = buildUnknown(x0, y0, z0, x1, y1, z1);
   scene.add(cubeMesh);
-  cube = null;
 }
 
 // moves on to the next goal once the path is flown and the drone is close enough to its end
@@ -283,8 +284,11 @@ function placeCameras(frameS: number) {
   top.lookAt(drone.position);
 }
 
-// goals and boxes from a tap. goals sit 3 m over the ground or 2 m over a roof, under the planner's 20 m ceiling
-const GOAL_OVER_GROUND = 3, GOAL_OVER_ROOF = 2, GOAL_MAX_Z = 18;
+// goals and boxes from a tap. goals sit 3 m over the ground or 2 m over a roof. the planner keeps 0.79 m under its
+// 20 m ceiling and over every roof, so 18.9 m is the highest goal that lands in a free cell (fine over roofs up to ~17.9 m)
+const GOAL_OVER_GROUND = 3, GOAL_OVER_ROOF = 2, GOAL_MAX_Z = 18.9;
+// a goal tapped on a wall moves this far out from it, past the 0.79 m the planner keeps from buildings
+const GOAL_OFF_WALL = 1.5;
 // the planning grid only covers 30 m out from home
 const AREA_M = 29;
 let tapMode: TapMode = 'goal';
@@ -352,12 +356,15 @@ function onTap(e: MouseEvent) {
     return;
   }
   // over the roof if it landed on top of something, otherwise over the ground
-  const z = p.z > 0.1 && hit.face.normal.z > 0.5 ? p.z + GOAL_OVER_ROOF : GOAL_OVER_GROUND;
-  sendTo(p.x, p.y, Math.min(z, GOAL_MAX_Z));
+  const n = hit.face.normal;
+  const z = p.z > 0.1 && n.z > 0.5 ? p.z + GOAL_OVER_ROOF : GOAL_OVER_GROUND;
+  // on a wall, step the goal out in front of it so it isn't inside the building's margin
+  const off = n.z < 0.5 ? GOAL_OFF_WALL : 0;
+  sendTo(p.x + n.x * off, p.y + n.y * off, Math.min(z, GOAL_MAX_Z));
 }
 renderer.domElement.addEventListener('click', onTap);
 
-// starts everything over like a fresh page load, keeping the wind and toggles the panel has set
+// starts the flight over: same city, calm gusts, no dropped boxes, keeping the wind and toggles the panel has set
 function resetAll() {
   // a fresh city clears dropped boxes, lidar finds and the replan count
   sim._new_city(SEED);
@@ -425,7 +432,8 @@ function frame(t: number) {
   if (steps > 0) {
     const t0 = performance.now();
     let done = 0;
-    while (done < steps && performance.now() - t0 < PHYSICS_BUDGET_MS) {
+    // nothing moves after a crash, so stop stepping (and stop the plot and steps/s counting frozen steps)
+    while (done < steps && !sim._is_crashed() && performance.now() - t0 < PHYSICS_BUDGET_MS) {
       sim._advance(1);
       afterStep();
       updateMission();

@@ -177,6 +177,12 @@ TEST_CASE("wind: moving with the wind at its speed feels no drag, hovering in it
   double k = 4 * P.rotor_drag * w;
   CHECK(std::abs(f.force.x - k * 4) < 1e-9);
   CHECK(std::abs(f.force.y - k * -2) < 1e-9);
+  // nose turned to face north, the same push east now comes out along the body's right side (-y)
+  QuadState north = at_rest(w);
+  north.q = axis_angle({0, 0, 1}, 3.14159265358979 / 2);
+  Wrench fn = wrench(P, north, {4, 0, 0});
+  CHECK(std::abs(fn.force.x) < 1e-9);
+  CHECK(std::abs(fn.force.y - k * -4) < 1e-9);
   // and once it's moving, it ends up drifting downwind
   QuadState s = at_rest(w);
   for (int i = 0; i < 1000; i++) s = step(P, s, {w, w, w, w}, 0.001, wind);

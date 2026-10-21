@@ -14,7 +14,8 @@ struct Wind {
   std::mt19937 rng;
 };
 
-// a calm start with this breeze and gust strength, the same seed always gives the same gusts
+// a calm start with this breeze and gust strength. the same seed gives the same gusts on one build,
+// native and wasm can drift apart in the last digits since exp, log and cos come from different math libraries
 Wind make_wind(Vec3 breeze, double sigma, unsigned seed);
 
 // moves the gusts on dt seconds and returns the wind the drone feels now

@@ -246,7 +246,7 @@ TEST_CASE("facing 90 degrees left, a 1 m step in x still flies along world x") {
   CHECK(norm(s.p - sp.pos) < 0.01);
 }
 
-TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gusts on top stay under 1 m") {
+TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gusts on top stay under 0.3 m") {
   Controller c;
   Setpoint sp;
   sp.pos = {0, 0, 10};
@@ -255,7 +255,10 @@ TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gu
   Wind w = make_wind({8, 0, 0}, 0, 1);
   for (int i = 0; i < 20000; i++) s = step(P, s, control(c, P, s, sp, 0.001), 0.001, wind_step(w, 0.001));
   CHECK(norm(s.p - sp.pos) < 0.02);
-  CHECK(rotate(s.q, {0, 0, 1}).x < -0.05);
+  // leaning west by 6.5 degrees, where tilted thrust cancels four rotors' drag (results/wind.md)
+  double lean = std::asin(-rotate(s.q, {0, 0, 1}).x) * 180 / 3.14159265358979;
+  INFO("lean ", lean);
+  CHECK(std::abs(lean - 6.5) < 0.5);
   // 1.5 m/s gusts on that breeze for a minute, the worst it gets pushed off its spot
   w = make_wind({8, 0, 0}, 1.5, 2);
   double worst = 0;
@@ -264,5 +267,5 @@ TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gu
     worst = std::max(worst, norm(s.p - sp.pos));
   }
   INFO("worst ", worst);
-  CHECK(worst < 1.0);
+  CHECK(worst < 0.3);
 }

@@ -123,6 +123,8 @@ EMSCRIPTEN_KEEPALIVE void reset(double x, double y, double z, double yaw) {
   c = Controller{};
   sp = Setpoint{};
   following = false;
+  // the panel's breeze and gust strength stay, but the gusts start calm from the same seed so a run can be repeated
+  wnd = make_wind(wnd.breeze, wnd.sigma, 2);
   sp.pos = s.p;
   sp.yaw = yaw;
   prev = s;
@@ -157,8 +159,10 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
   for (int i = 0; i < steps && !crash; i++) {
     tick++;
+    // the wind this step, the imu feels its drag and the physics moves the drone through it
+    Vec3 air = wind_step(wnd, DT);
     // imu every step, gps and magnetometer at 10 Hz
-    predict(est, read_imu(sn, P, s, DT), DT);
+    predict(est, read_imu(sn, P, s, DT, air), DT);
     if (tick % 100 == 0) {
       gps(est, read_gps(sn, s));
       mag(est, read_mag(sn, s));
@@ -176,7 +180,6 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
 
     // the controller flies on the estimate (or the truth), the physics moves the real drone through the wind
     prev = s;
-    Vec3 air = wind_step(wnd, DT);
     s = step(P, s, control(c, P, nav(), sp, DT), DT, air);
     wind_buf[0] = air.x, wind_buf[1] = air.y, wind_buf[2] = air.z;
     // touching a box or the ground ends the run
@@ -217,10 +220,13 @@ EMSCRIPTEN_KEEPALIVE int new_city(unsigned seed) {
 EMSCRIPTEN_KEEPALIVE double* boxes_ptr() { return box_buf; }
 
 // puts a box in the real world that the drone isn't told about, only the lidar can find it.
-// a box that would land on the drone isn't added, returns 0 then
+// a box within 2 m of the drone isn't added (returns 0), the lidar wouldn't get a turn in before it hit
 EMSCRIPTEN_KEEPALIVE int add_box(double x0, double y0, double z0, double x1, double y1, double z1) {
   Box b{{x0, y0, z0}, {x1, y1, z1}};
-  if (crashed(s.p, {b}) && s.p.z >= kReach) return 0;
+  Box near = grow(b, 2);
+  if (s.p.x > near.lo.x && s.p.x < near.hi.x && s.p.y > near.lo.y && s.p.y < near.hi.y && s.p.z > near.lo.z &&
+      s.p.z < near.hi.z)
+    return 0;
   world.push_back(b);
   return 1;
 }
