@@ -13,7 +13,7 @@ export interface Drone {
   _fly_to(x: number, y: number, z: number): number;
   _path_ptr(): number;
   _path_done(): number;
-  _add_box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void;
+  _add_box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): number;
   _path_len(): number;
   _replan_count(): number;
   _est_now(): number;

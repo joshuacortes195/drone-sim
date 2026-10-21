@@ -10,6 +10,7 @@
 #include "planner.h"
 #include "quad.h"
 #include "route.h"
+#include "wind.h"
 
 #include <vector>
 
@@ -50,6 +51,15 @@ static std::vector<Box> world;
 static Vec3 goal;
 static int replans = 0;
 
+// the wind (breeze from the west plus gusts) and the wind the drone feels right now as x y z.
+// a crash freezes the sim until the next reset. truth makes the controller and planner use the real state
+static Wind wnd = make_wind({}, 0, 2);
+static double wind_buf[3];
+static bool crash = false, truth = false;
+
+// the state everything flies on: the estimate, or the real state in truth mode
+static const QuadState& nav() { return truth ? s : e; }
+
 // the last lidar turn's hit points as x y z, 16 beams x 180 steps at most
 static double hit_buf[3 * 16 * 180];
 static int hit_count = 0;
@@ -71,7 +81,7 @@ static void publish_path() {
 // one lidar turn: keeps the hits for the page, adds new obstacles to the map and replans when they cut the path.
 // the same rule as tools/lidar_report.cpp, both call replan() in core
 static void lidar_turn() {
-  std::vector<Vec3> hits = scan(L, sn, s, e, world);
+  std::vector<Vec3> hits = scan(L, sn, s, nav(), world);
   hit_count = int(std::min(hits.size(), size_t(16 * 180)));
   for (int i = 0; i < hit_count; i++) {
     hit_buf[3 * i] = hits[i].x;
@@ -79,15 +89,16 @@ static void lidar_turn() {
     hit_buf[3 * i + 2] = hits[i].z;
   }
   size_t known = grown.size();
-  if (add_hits(grid, grown, hits, boxes, e.p) && following && replan(path, grid, grown, known, e.p, goal)) {
+  const QuadState& n = nav();
+  if (add_hits(grid, grown, hits, boxes, n.p) && following && replan(path, grid, grown, known, n.p, goal)) {
     // no way through, or a path too long to draw: hold where it thinks it is.
     // the hold is one point, so nothing can cut it and it won't replan again on its own
     publish_path();
     if (path.empty()) {
-      path = {e.p};
+      path = {n.p};
       publish_path();
     }
-    path_yaw = heading(e.q);
+    path_yaw = heading(n.q);
     path_t = 0;
     replans++;
   }
@@ -130,6 +141,7 @@ EMSCRIPTEN_KEEPALIVE void reset(double x, double y, double z, double yaw) {
   pack(e, est_prev_buf);
   tick = 0;
   hit_count = 0;
+  crash = false;
 }
 
 // tells the controller where to fly and which way to face, it holds there once it arrives
@@ -143,7 +155,7 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
 // runs the controller and physics forward some 1 ms steps. the page calls it one step at a time so it can check
 // the mission after each step, a big batch is only used to time the pure wasm cost
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
-  for (int i = 0; i < steps; i++) {
+  for (int i = 0; i < steps && !crash; i++) {
     tick++;
     // imu every step, gps and magnetometer at 10 Hz
     predict(est, read_imu(sn, P, s, DT), DT);
@@ -162,9 +174,13 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
     // when flying a path, the setpoint slides along it
     if (following) sp = follow(path, path_t, CRUISE, ACCEL, path_yaw);
 
-    // the controller flies on the estimate, the physics moves the real drone
+    // the controller flies on the estimate (or the truth), the physics moves the real drone through the wind
     prev = s;
-    s = step(P, s, control(c, P, e, sp, DT), DT);
+    Vec3 air = wind_step(wnd, DT);
+    s = step(P, s, control(c, P, nav(), sp, DT), DT, air);
+    wind_buf[0] = air.x, wind_buf[1] = air.y, wind_buf[2] = air.z;
+    // touching a box or the ground ends the run
+    if (crashed(s.p, world)) crash = true;
   }
   pack(s, now_buf);
   pack(prev, prev_buf);
@@ -200,19 +216,45 @@ EMSCRIPTEN_KEEPALIVE int new_city(unsigned seed) {
 }
 EMSCRIPTEN_KEEPALIVE double* boxes_ptr() { return box_buf; }
 
-// puts a box in the real world that the drone isn't told about, only the lidar can find it
-EMSCRIPTEN_KEEPALIVE void add_box(double x0, double y0, double z0, double x1, double y1, double z1) {
-  world.push_back({{x0, y0, z0}, {x1, y1, z1}});
+// puts a box in the real world that the drone isn't told about, only the lidar can find it.
+// a box that would land on the drone isn't added, returns 0 then
+EMSCRIPTEN_KEEPALIVE int add_box(double x0, double y0, double z0, double x1, double y1, double z1) {
+  Box b{{x0, y0, z0}, {x1, y1, z1}};
+  if (crashed(s.p, {b}) && s.p.z >= kReach) return 0;
+  world.push_back(b);
+  return 1;
 }
+
+// breeze from the west in m/s and gust strength in m/s, both from the panel sliders
+EMSCRIPTEN_KEEPALIVE void set_wind(double breeze, double gusts) {
+  wnd.breeze = {breeze, 0, 0};
+  wnd.sigma = gusts;
+  if (gusts == 0) wnd.gust = {};
+}
+EMSCRIPTEN_KEEPALIVE double* wind_now() { return wind_buf; }
+
+// gps noise toggle: 1 is the everyday neo-m8n (meters off), 0 the rtk one (about a centimeter).
+// only the gps differs between the two, so the sensors and the filter swap just those numbers
+EMSCRIPTEN_KEEPALIVE void set_noisy_gps(int on) {
+  Noise n = on ? Noise{} : rtk();
+  sn.n.gps_xy = est.n.gps_xy = n.gps_xy;
+  sn.n.gps_z = est.n.gps_z = n.gps_z;
+}
+
+// truth toggle: 1 flies and plans on the real state, 0 on the estimate
+EMSCRIPTEN_KEEPALIVE void set_truth(int on) { truth = on; }
+
+// 1 once the drone has touched a box or the ground
+EMSCRIPTEN_KEEPALIVE int is_crashed() { return crash; }
 
 // plans a smoothed path from where the drone thinks it is to the goal and starts flying it.
 // returns how many waypoints it has, 0 when there's no way there (the drone then just holds)
 EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
   goal = {x, y, z};
-  path = smooth(astar(grid, e.p, goal), grown);
+  path = smooth(astar(grid, nav().p, goal), grown);
   publish_path();
   // keep facing the way it thinks it faces now until the path moves sideways
-  path_yaw = heading(e.q);
+  path_yaw = heading(nav().q);
   path_t = 0;
   following = !path.empty();
   return int(path.size());

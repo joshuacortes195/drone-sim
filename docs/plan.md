@@ -156,9 +156,14 @@ Concepts first: raycasting, turning hits into an occupancy map.
 
 ### Phase 6: missions and controls
 
+Split in two: 6a controls, 6b presets and the graphics pass.
+
 - click or tap to set a goal, drop boxes, wind gust slider, sensor noise toggle, truth vs estimate toggle
 - presets: waypoint route, lawnmower search pattern over an area, return to home
 - React panel only for controls and readouts (vercel-react-best-practices)
+- graphics pass: the scene shouldn't look like playdough. Real lighting with soft shadows, a sky and ground that read as a place, proper building materials, a drone model with arms, motors and spinning props
+- 6a core done: wind as a breeze from the west plus gauss markov gusts (`core/wind.{h,cpp}`, tau 2 s is my pick) through rotor drag only, `crashed()` in `core/map.cpp` (the drone's 0.356 m reach against boxes and the ground). Holds a hover within 0.3 mm in an 8 m/s breeze leaning about 6.5 deg, worst 0.177 m off in a minute of 1.5 m/s gusts (a test, not a results file yet)
+- 6a bindings done: `set_wind`, `set_noisy_gps`, `set_truth`, `is_crashed`, a crash freezes the sim, `add_box` refuses a box on the drone. The page doesn't use them yet
 
 ### Phase 7: evaluation and ship
 
