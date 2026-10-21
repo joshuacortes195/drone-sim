@@ -415,3 +415,39 @@ Interview questions:
 - How do you know your estimator works when the real drone never knows its true position?
 - Why does the error grow between GPS fixes and drop at each one?
 - What would the ghost look like with a regular GPS instead of RTK?
+
+## Wind: a breeze plus gusts
+
+Wind is just the air moving. What the rotors care about is the drone's speed through the air, so everywhere the rotor drag used the drone's velocity it now uses the velocity minus the wind. Hovering still in an 8 m/s breeze looks to the rotors exactly like flying at 8 m/s through still air, so the drone gets pushed downwind and has to lean into it. Riding along with the wind at its speed, it feels nothing at all. Wind gets in only through the rotor drag and the rolling moment, I don't model drag on the body.
+
+The breeze is the steady part, from the west at whatever the slider says. Gusts sit on top. Each axis is a first order gauss markov process: every step the gust fades a little toward zero and gets a random kick. The fade is e^(-dt/tau) and the kick is sigma times sqrt(1 - fade²), which is the exact version, so the gusts spread by sigma and last about tau (2 s, my pick so you can watch them) no matter the step size. The easy version, a kick of sigma times sqrt(2 dt / tau), is only right for tiny steps. At a 1 s step it spreads 1.89 m/s instead of 1.5, and a test checks exactly that.
+
+In a steady breeze the velocity loop's integral learns the push and the drone sits back on its spot leaning 6.5 deg into 8 m/s, within 0.3 mm. Gusts are what move it: about 7 cm rms per 1.5 m/s of gusts, and at most 0.41 m in 3 m/s gusts.
+
+Where it lives: `core/wind.{h,cpp}`, the air speed in `wrench()` in `core/quad.cpp`, the numbers in `results/wind.md` from `tools/wind_report.cpp`.
+
+Interview questions:
+- How does wind actually push on a quadcopter?
+- Why doesn't a steady wind leave a steady position error?
+- What's a gauss markov process and why not just add white noise to the wind?
+- Why does the discretization of the gust filter matter?
+
+## The bug where the accelerometer couldn't feel the wind
+
+The IMU's accelerometer reads every force on the drone except gravity: thrust, rotor drag, and the wind's push through that drag. My `read_imu()` worked out that force with still air, so in wind it left out a force the drone really felt. The Kalman filter predicts with the accelerometer, so every gust shoved the real drone while the filter thought nothing happened, and only the GPS slowly pulled the estimate back.
+
+Nothing failed, because none of my estimator tests used wind and the wind tests flew on the truth. I only caught it writing the wind results tool, when I had to pass the wind to the physics and noticed the IMU call had no way to take it. On RTK with 3 m/s gusts the drone wandered 0.50 m rms before the fix and 0.15 m after. On the everyday GPS it was 6.2 m before and 1.26 m after, and it got pushed up to 17 m off its spot. That's why the page crashed so fast with the everyday GPS and gusts in the first 6a session. The fix is one argument, and a test now checks that a still drone in a breeze reads the drag on its accelerometer. Next time I add a force to the physics, I'll check every sensor that measures force sees it too.
+
+Interview questions:
+- What does an accelerometer measure, and what doesn't it?
+- How would you notice a sensor model that disagrees with the physics?
+
+## Crashing
+
+There's no bouncing. `crashed()` in `core/map.cpp` finds the closest point of each box to the drone's center and calls it a crash when that's within the drone's reach (0.356 m, the arm plus a rotor), or when the center is that close to the ground. A crash freezes the sim, the page shows a banner, and reset starts the flight over. A box tapped within 2 m of the drone gets refused, since the lidar wouldn't get a turn in before it hit.
+
+## Turning a tap into a goal
+
+A tap is a pixel, and the scene is 3D. three.js casts a ray from the camera through that pixel and gives back the first thing it hits: the ground, a building or a dropped box, plus which way that face points. On a roof the goal goes 2 m above it, on the ground 3 m up, and on a wall 1.5 m out in front of it so it isn't inside the margin the planner keeps around buildings. Goals stop at 18.9 m, the highest free cell under the 20 m ceiling. That works over roofs up to about 17.9 m. A roof at the full 18 m has no free cell above it, so a tap there says it can't find a way. If the planner can't get there, the drone goes back to the goal it had.
+
+Where it lives: `onTap`, `sendTo` and `dropBox` in `web/src/main.ts`, `add_box` in `wasm/bindings.cpp`.

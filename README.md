@@ -1,6 +1,6 @@
 # drone-sim
 
-An autonomous quadcopter simulator that runs in the browser. The drone has real flight physics, plans its own path through a city of boxes, follows it with a cascaded PID flight controller, sees obstacles with a simulated lidar and works out where it is from noisy sensors. Setting your own goal, dropping obstacles in its way and adding wind come next (phase 6 in the plan).
+An autonomous quadcopter simulator that runs in the browser. The drone has real flight physics, plans its own path through a city of boxes, follows it with a cascaded PID flight controller, sees obstacles with a simulated lidar and works out where it is from noisy sensors. You can tap to give it a goal, drop boxes in its way and turn on wind. Mission presets and a graphics pass come next (phase 6b in the plan).
 
 The physics, control, planning and estimation are written in C++ and tested natively. The same code is compiled to WebAssembly for the browser, where three.js draws the scene.
 
@@ -13,6 +13,8 @@ For planning, a seed builds a city of buildings, and 26 neighbor A* searches a 0
 The drone works out where it is from simulated sensors with noise from real data sheets, using a Kalman filter for position and a complementary filter for attitude. With an RTK GPS the estimate is 1.1 cm RMS off and the planned flights are as safe as flying on the truth. A regular GPS puts 51 of 200 flights within reach of a building ([results/estimation.md](results/estimation.md)).
 
 It also has a simulated lidar (the Velodyne VLP-16 beam pattern) and replans when it sees something new. I dropped an unknown cube on each of 200 planned paths: flying blind hit it every time, and with the lidar every flight got around it and reached the goal ([results/lidar.md](results/lidar.md)).
+
+Wind is a steady breeze plus gusts, and it pushes on the drone through rotor drag. In an 8 m/s breeze it leans 6.5 degrees into the wind and holds its spot within 0.3 mm. In 3 m/s gusts on RTK it wanders 0.15 m RMS and gets pushed at most 0.42 m. With a regular GPS it wanders about 1.25 m whatever the wind, so the GPS matters more than the wind ([results/wind.md](results/wind.md)).
 
 In the page the drone flies on its own estimate, with a see-through blue ghost where it thinks it is, a live plot of how far off that is, and the lidar hits as dots. The full plan is in [docs/plan.md](docs/plan.md), and my notes on the physics and controls are in [docs/robotics-notes.md](docs/robotics-notes.md).
 
@@ -58,6 +60,12 @@ To print the lidar numbers in [results/lidar.md](results/lidar.md) (200 flights 
 ./build/lidar_report
 ```
 
+To print the wind numbers in [results/wind.md](results/wind.md) (540 hovers in breezes and gusts on the truth, RTK and a regular GPS, about 90 s):
+
+```bash
+./build/wind_report
+```
+
 ## Run it in the browser
 
 You'll need Node 22+. The compiled wasm is checked in, so this works without Emscripten:
@@ -68,7 +76,9 @@ npm install
 npm run dev
 ```
 
-The drone flies a loop of planned paths through a seeded city, with the planned path drawn in teal. The blue ghost is where the drone thinks it is, the magenta dots are the last lidar turn, and the outlined cube is one it wasn't told about. It drops onto the first leg once the drone is moving, so you can watch the lidar find it and the path get redrawn, with the old path faded for 2 s. The plot in the corner is how far the estimate is from the real drone, averaged over each 0.1 s. Press `c` or the button to switch between the chase camera and the map view. Frame rate and physics numbers are in [results/browser.md](results/browser.md).
+The drone flies a loop of planned paths through a seeded city, with the planned path drawn in teal. The blue ghost is where the drone thinks it is, the magenta dots are the last lidar turn, and the outlined cube is one it wasn't told about. It drops onto the first leg once the drone is moving, so you can watch the lidar find it and the path get redrawn, with the old path faded for 2 s. The plot in the corner is how far the estimate is from the real drone, averaged over each 0.1 s. Press `c` or the button to switch between the chase camera and the map view.
+
+The panel on the side lets you tap the city to set a goal (it stops the tour until you reset) or drop a 2 m box the drone doesn't know about, set a breeze from the west and gusts, switch to a regular GPS and fly on the real position instead of the estimate. If the drone hits something it stops and a banner offers a reset. Frame rate and physics numbers are in [results/browser.md](results/browser.md).
 
 To rebuild the wasm after changing the C++ (needs [Emscripten](https://emscripten.org)):
 
