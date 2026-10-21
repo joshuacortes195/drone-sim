@@ -64,3 +64,6 @@ bool segment_hits(Vec3 a, Vec3 b, const Box& box);
 // how far along a unit direction a ray goes before it enters the box, infinity if it doesn't within range.
 // 0 when it starts inside
 double ray_box(Vec3 from, Vec3 dir, double range, const Box& box);
+
+// true when a drone centered at p reaches into any box or the ground, which ends the run
+bool crashed(Vec3 p, const std::vector<Box>& world);

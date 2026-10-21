@@ -1,6 +1,7 @@
 #include "doctest.h"
 #include "controller.h"
 #include "step_response.h"
+#include "wind.h"
 
 #include <algorithm>
 #include <array>
@@ -243,4 +244,25 @@ TEST_CASE("facing 90 degrees left, a 1 m step in x still flies along world x") {
   }
   CHECK(worst_y < 0.02);
   CHECK(norm(s.p - sp.pos) < 0.01);
+}
+
+TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gusts on top stay under 1 m") {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {0, 0, 10};
+  QuadState s = hovering();
+  // steady breeze blowing east: once the velocity integral has learned it, the drone sits back on its spot leaning west
+  Wind w = make_wind({8, 0, 0}, 0, 1);
+  for (int i = 0; i < 20000; i++) s = step(P, s, control(c, P, s, sp, 0.001), 0.001, wind_step(w, 0.001));
+  CHECK(norm(s.p - sp.pos) < 0.02);
+  CHECK(rotate(s.q, {0, 0, 1}).x < -0.05);
+  // 1.5 m/s gusts on that breeze for a minute, the worst it gets pushed off its spot
+  w = make_wind({8, 0, 0}, 1.5, 2);
+  double worst = 0;
+  for (int i = 0; i < 60000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001, wind_step(w, 0.001));
+    worst = std::max(worst, norm(s.p - sp.pos));
+  }
+  INFO("worst ", worst);
+  CHECK(worst < 1.0);
 }

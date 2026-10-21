@@ -2,10 +2,10 @@
 
 #include <algorithm>
 
-Wrench wrench(const QuadParams& P, const QuadState& s) {
+Wrench wrench(const QuadParams& P, const QuadState& s, Vec3 wind) {
   Wrench out;
-  // how fast the drone moves through the air, seen from the body (wind gets subtracted here later)
-  Vec3 air = rotate(conj(s.q), s.v);
+  // how fast the drone moves through the air, seen from the body
+  Vec3 air = rotate(conj(s.q), s.v - wind);
   for (int i = 0; i < 4; i++) {
     // each rotor pushes straight up along body z, and tips the body from where it sits
     double thrust = P.k_f * s.rotor[i] * s.rotor[i];
@@ -26,8 +26,8 @@ Wrench wrench(const QuadParams& P, const QuadState& s) {
   return out;
 }
 
-QuadState derivative(const QuadParams& P, const QuadState& s, const Rotors& cmd) {
-  Wrench f = wrench(P, s);
+QuadState derivative(const QuadParams& P, const QuadState& s, const Rotors& cmd, Vec3 wind) {
+  Wrench f = wrench(P, s, wind);
   QuadState d;
   d.p = s.v;
   // newton: rotor force turned into the world, plus gravity
@@ -57,12 +57,12 @@ static QuadState add(const QuadState& s, const QuadState& d, double h) {
   return r;
 }
 
-QuadState step(const QuadParams& P, const QuadState& s, const Rotors& cmd, double dt) {
+QuadState step(const QuadParams& P, const QuadState& s, const Rotors& cmd, double dt, Vec3 wind) {
   // rk4: sample the rates at the start, twice in the middle and at the end, then blend
-  QuadState k1 = derivative(P, s, cmd);
-  QuadState k2 = derivative(P, add(s, k1, dt / 2), cmd);
-  QuadState k3 = derivative(P, add(s, k2, dt / 2), cmd);
-  QuadState k4 = derivative(P, add(s, k3, dt), cmd);
+  QuadState k1 = derivative(P, s, cmd, wind);
+  QuadState k2 = derivative(P, add(s, k1, dt / 2), cmd, wind);
+  QuadState k3 = derivative(P, add(s, k2, dt / 2), cmd, wind);
+  QuadState k4 = derivative(P, add(s, k3, dt), cmd, wind);
   QuadState r = add(s, k1, dt / 6);
   r = add(r, k2, dt / 3);
   r = add(r, k3, dt / 3);

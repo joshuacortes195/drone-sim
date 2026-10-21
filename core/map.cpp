@@ -88,3 +88,13 @@ double ray_box(Vec3 from, Vec3 dir, double range, const Box& box) {
   double t0 = 0, t1 = range;
   return slab(from, dir, box, t0, t1) ? t0 : std::numeric_limits<double>::infinity();
 }
+
+bool crashed(Vec3 p, const std::vector<Box>& world) {
+  if (p.z < kReach) return true;
+  for (const Box& b : world) {
+    // closest point of the box to the drone, then how far that is
+    Vec3 c{std::clamp(p.x, b.lo.x, b.hi.x), std::clamp(p.y, b.lo.y, b.hi.y), std::clamp(p.z, b.lo.z, b.hi.z)};
+    if (norm(p - c) < kReach) return true;
+  }
+  return false;
+}

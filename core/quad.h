@@ -37,10 +37,11 @@ struct Wrench {
   Vec3 force, torque;
 };
 
-Wrench wrench(const QuadParams& P, const QuadState& s);
+// wind is the air's own velocity in the world, it only reaches the drone through rotor drag
+Wrench wrench(const QuadParams& P, const QuadState& s, Vec3 wind = {});
 
 // how fast each part of the state is changing right now, packed in the same struct
-QuadState derivative(const QuadParams& P, const QuadState& s, const Rotors& cmd);
+QuadState derivative(const QuadParams& P, const QuadState& s, const Rotors& cmd, Vec3 wind = {});
 
 // moves the drone forward dt seconds with rk4, cmd is the rotor speed each motor is asked for
-QuadState step(const QuadParams& P, const QuadState& s, const Rotors& cmd, double dt);
+QuadState step(const QuadParams& P, const QuadState& s, const Rotors& cmd, double dt, Vec3 wind = {});

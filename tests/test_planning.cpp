@@ -340,3 +340,19 @@ TEST_CASE("segment_hits: touching counts as a hit, lying on a face, a single poi
   CHECK(segment_hits({1, 0.5, 0.5}, {1, 0.5, 0.5}, b));      // a point on a face
   CHECK(!segment_hits({1.5, 0.5, 0.5}, {1.5, 0.5, 0.5}, b)); // a point outside
 }
+
+TEST_CASE("crash check: the drone's reach touching a box or the ground is a crash, a hair off is not") {
+  std::vector<Box> world = {{{0, 0, 0}, {2, 2, 2}}};
+  // off the side face
+  CHECK(!crashed({2 + kReach + 0.01, 1, 1}, world));
+  CHECK(crashed({2 + kReach - 0.01, 1, 1}, world));
+  // off the top corner, diagonally: within reach on each axis but not in a straight line
+  double d = 1 / std::sqrt(3.0);
+  CHECK(!crashed(Vec3{2, 2, 2} + Vec3{d, d, d} * (kReach + 0.01), world));
+  CHECK(crashed(Vec3{2, 2, 2} + Vec3{d, d, d} * (kReach - 0.01), world));
+  // inside the box
+  CHECK(crashed({1, 1, 1}, world));
+  // the ground
+  CHECK(!crashed({10, 10, kReach + 0.01}, world));
+  CHECK(crashed({10, 10, kReach - 0.01}, world));
+}

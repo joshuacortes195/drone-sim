@@ -162,3 +162,24 @@ TEST_CASE("yawing on the spot, rotor drag on each moving rotor pushes back again
   CHECK(std::abs(f.torque.x) + std::abs(f.torque.y) < 1e-12);
   CHECK(std::abs(f.force.x) + std::abs(f.force.y) < 1e-12);
 }
+
+TEST_CASE("wind: moving with the wind at its speed feels no drag, hovering in it gets blown downwind") {
+  double w = hover_speed();
+  Vec3 wind{4, -2, 0};
+  // riding along with the air is the same as sitting still in calm air
+  QuadState riding = at_rest(w);
+  riding.v = wind;
+  Wrench a = wrench(P, riding, wind), b = wrench(P, at_rest(w));
+  CHECK(norm(a.force - b.force) < 1e-12);
+  CHECK(norm(a.torque - b.torque) < 1e-12);
+  // still drone in that wind gets pushed downwind by four rotors' drag, 4 k w per m/s of wind (plan.md)
+  Wrench f = wrench(P, at_rest(w), wind);
+  double k = 4 * P.rotor_drag * w;
+  CHECK(std::abs(f.force.x - k * 4) < 1e-9);
+  CHECK(std::abs(f.force.y - k * -2) < 1e-9);
+  // and once it's moving, it ends up drifting downwind
+  QuadState s = at_rest(w);
+  for (int i = 0; i < 1000; i++) s = step(P, s, {w, w, w, w}, 0.001, wind);
+  CHECK(s.v.x > 0.1);
+  CHECK(s.v.y < -0.1);
+}
