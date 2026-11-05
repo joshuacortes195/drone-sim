@@ -11,6 +11,7 @@
 #include "wind.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -50,6 +51,8 @@ const double BREEZE = 4, GUSTS = 1.5;
 struct Flight {
   bool crashed = false, timed_out = false, stuck = false;
   double end_error = 0, track_rms = 0, est_rms = 0, seconds = 0;
+  // how far from the goal it was when a replan found no path, and how long before the path's end that was
+  double stuck_dist = 0, stuck_early_s = 0;
   int replans = 0;
   std::vector<double> replan_ms;
 };
@@ -78,7 +81,8 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
   Vec3 gsum;
   for (int i = 0; i < 1000; i++) gsum = gsum + read_imu(sn, P, s, DT).gyro;
   est.gyro_bias = gsum * DT;
-  Wind wnd = make_wind({breeze, 0, 0}, gusts, seed + 1);
+  // the gust stream gets its own seed range, well away from every trip's sensor seed
+  Wind wnd = make_wind({breeze, 0, 0}, gusts, seed + 10000);
   Lidar L;
 
   Flight f;
@@ -86,8 +90,9 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
   // when the current path started, and when to stop: its flight time plus 3 s to settle
   int start_i = 0, end_i = int(std::lround((path_time(path, CRUISE, ACCEL) + 3) / DT));
   const int limit_i = int(std::lround(TIME_LIMIT_S / DT));
-  int i = 1;
-  for (; i <= end_i; i++) {
+  // steps actually flown, for the rms and the flight time
+  int done = 0;
+  for (int i = 1; i <= end_i; i++) {
     if (i > limit_i) {
       f.timed_out = true;
       break;
@@ -112,8 +117,10 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
         f.replan_ms.push_back(ms_since(t0));
         f.replans++;
         if (path.empty()) {
-          // nowhere to go: hold where it is
+          // nowhere to go: hold where it is, and note where that happened
           f.stuck = true;
+          f.stuck_dist = norm(e.p - goal);
+          f.stuck_early_s = std::max(0.0, (end_i - i) * DT - 3);
           path = {e.p};
         }
         yaw = heading(e.q);
@@ -125,6 +132,7 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
 
     Setpoint sp = follow(path, t, CRUISE, ACCEL, yaw);
     s = step(P, s, control(c, P, e, sp, DT), DT, air);
+    done++;
     // how far the real drone is from where it was told to be, and from where it thinks it is
     track_sum += norm(s.p - sp.pos) * norm(s.p - sp.pos);
     est_sum += norm(e.p - s.p) * norm(e.p - s.p);
@@ -134,7 +142,7 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
       break;
     }
   }
-  int steps = std::max(1, std::min(i, limit_i));
+  int steps = std::max(1, done);
   f.seconds = steps * DT;
   f.track_rms = std::sqrt(track_sum / steps);
   f.est_rms = std::sqrt(est_sum / steps);
@@ -147,6 +155,10 @@ struct Tally {
   int flights = 0, success = 0, crashed = 0, missed = 0, timed_out = 0, stuck = 0;
   std::vector<double> track, est, end, seconds, replans, replan_ms;
   std::vector<unsigned> failed_seeds;
+  // seed, distance to the goal and seconds before the path's end, for each replan that found no path
+  std::vector<std::array<double, 3>> stuck_at;
+  // the crashes, kept out of the error stats so a crash doesn't read as a big tracking or goal error
+  std::vector<double> crash_end;
 };
 
 // adds one flight to the tally
@@ -158,7 +170,14 @@ static void count(Tally& t, const Flight& f, unsigned seed) {
   if (f.crashed) t.crashed++;
   else if (f.timed_out) t.timed_out++;
   else if (f.end_error >= ARRIVED_M) t.missed++;
-  if (f.stuck) t.stuck++;
+  if (f.stuck) {
+    t.stuck++;
+    t.stuck_at.push_back({double(seed), f.stuck_dist, f.stuck_early_s});
+  }
+  if (f.crashed) {
+    t.crash_end.push_back(f.end_error);
+    return;
+  }
   t.track.push_back(f.track_rms);
   t.est.push_back(f.est_rms);
   t.end.push_back(f.end_error);
@@ -174,6 +193,10 @@ static void report(const char* name, const Tally& t) {
               name, t.flights, t.success, 100.0 * t.success / std::max(1, t.flights), t.crashed, t.timed_out,
               ARRIVED_M, t.missed, t.stuck);
   for (unsigned s : t.failed_seeds) std::printf("  failed on seed %u\n", s);
+  for (double d : t.crash_end) std::printf("  a crash ended %.3f m from the goal\n", d);
+  for (auto& s : t.stuck_at)
+    std::printf("  no path on seed %.0f, %.2f m from the goal, %.2f s before the path's end\n", s[0], s[1], s[2]);
+  std::printf("  the stats below leave out crashed flights. tracking error includes the 3 s hold at the goal\n");
   summary("tracking error, rms per flight (m)", t.track);
   summary("estimation error, rms per flight (m)", t.est);
   summary("off the goal at the end (m)", t.end);

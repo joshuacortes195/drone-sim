@@ -19,13 +19,13 @@ Over 1000 seeded cities with a random trip in each, flying the whole stack (plan
 | | calm | windy |
 |---|---|---|
 | success (within 1 m of the goal, no crash, inside 120 s) | 1000 / 1000 | 999 / 1000 |
-| tracking error, rms per flight, median | 0.109 m | 0.144 m |
+| tracking error, rms per flight, median | 0.109 m | 0.145 m |
 | estimation error, rms per flight, median | 0.013 m | 0.013 m |
-| off the goal at the end, median | 0.081 m | 0.098 m |
-| planning time (A* + smoothing), median | 10.9 ms | |
+| off the goal at the end, median | 0.081 m | 0.097 m |
+| planning time (A* + smoothing), median | 10.4 ms | |
 | path length / straight line, median | 1.009 | |
 
-The one crash was a goal right next to a building in the wind: the planner leaves 0.43 m of slack past the drone's reach, and a gust pushed it 0.8 m off on the last leg. The rest of the numbers, from the physics up, are in [results/](results/).
+The one crash was a short downwind leg ending next to a building: a gust pushed the drone past its setpoint, braking against the breeze tilted it past what the motors can hold altitude at, and it sank and swung into the wall. The rest of the numbers, from the physics up, are in [results/](results/).
 
 The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.119 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
 
@@ -87,7 +87,7 @@ To print the wind numbers in [results/wind.md](results/wind.md) (540 hovers in b
 ./build/wind_report
 ```
 
-To run the batch evaluation in [results/eval.md](results/eval.md) (a random trip over each of 1000 seeded cities, calm and windy, about 4.5 minutes on my Mac). Pass a smaller count to try it quickly:
+To run the batch evaluation in [results/eval.md](results/eval.md) (a random trip over each of 1000 seeded cities, calm and windy, about 4 minutes on my Mac). Pass a smaller count to try it quickly:
 
 ```bash
 ./build/batch_eval 1000

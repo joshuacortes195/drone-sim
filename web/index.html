@@ -29,7 +29,8 @@
         font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink);
       }
       .bar span { padding: 4px 8px; border-radius: 6px; }
-      .bar button { font: inherit; color: var(--ink); border-radius: 6px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
+      /* the camera button stays white so it reads as a button, not another readout */
+      .bar button { font: inherit; color: var(--ink); background: #fff; border-color: var(--line); border-radius: 6px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
       /* styling for the bottom left panel with the error plot and the color key */
       .panel {
         position: fixed; left: 8px; bottom: 8px; width: min(340px, calc(100vw - 32px));
@@ -47,6 +48,8 @@
         position: fixed; top: 8px; right: 8px; width: 240px; box-sizing: border-box;
         padding: 10px; border-radius: 8px;
         font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink);
+        /* a short window (a phone on its side) scrolls the panel instead of cutting off reset */
+        max-height: calc(100vh - 16px); overflow-y: auto;
       }
       .controls header { display: flex; align-items: center; }
       .controls h1 { flex: 1; margin: 0; font-size: 12px; font-weight: 600; }
@@ -85,7 +88,8 @@
       @media (max-width: 700px) {
         .bar { right: 8px; }
         .controls { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 55vh; overflow-y: auto; }
-        .panel { bottom: auto; top: 96px; right: 8px; width: auto; padding: 6px; }
+        /* the plot sits just above the folded controls, so a readout that wraps to three lines can't end up under it */
+        .panel { bottom: 104px; right: 8px; width: auto; padding: 6px; }
         .panel canvas { height: 64px; }
         .key { display: none; }
       }
