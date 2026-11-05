@@ -50,6 +50,16 @@ From `npm run build`:
 | page js (three.js plus my code) | 564.21 kB | 142.66 kB |
 | `index.html` | 0.87 kB | 0.53 kB |
 
+That was phase 3. From `npm run build` on 2026-11-04 (phase 7, Vite 8, my Mac), with the lidar, estimator, wind, planner, React panel and the graphics pass in:
+
+| file | size | gzip |
+|---|---|---|
+| `drone.wasm` | 71.27 kB | 36.71 kB |
+| page js (three.js, React and my code) | 818.06 kB | 223.47 kB |
+| `index.html` (the styles are inline) | 4.58 kB | 1.74 kB |
+
+Vite warns about the js being over 500 kB. I tried putting three.js and React in their own files: three.js alone came out at 572.29 kB (144.64 kB gzip), so it still warned and the total didn't shrink, and I left it as one file.
+
 ## Phase 5b page: flying on the estimate with the lidar (my PC)
 
 Checked 2026-10-18 on my PC, rerun 2026-10-19 after the review fixes (the cube now drops in once the drone is moving, the plot averages each 0.1 s), same PC (AMD Ryzen 7 3700X, 16 GB RAM, Windows 10 Home 19045), headless Chrome 155 driven by Playwright, the Vite dev server, wasm from emcc 6.0.12. Not comparable with the Mac numbers above.
