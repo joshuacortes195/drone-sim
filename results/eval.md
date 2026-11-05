@@ -47,4 +47,4 @@ Seed 962 in the wind. The goal (-2.25, -27.75, 2.25) is in a free cell right nex
 
 ## The replans that found no path
 
-8 calm and 6 windy flights had a replan that couldn't find a way and held where it was, but every one of them still ended within 1 m of the goal, so they count as successes.
+8 calm and 6 windy flights had a replan that couldn't find a way and held where it was, but every one of them still ended within 1 m of the goal, so they count as successes. I reran it with a print on each one: all 14 happened after the drone had already reached its goal, 0.03 to 0.57 m from it (most under 0.25 m). Those goals sit next to a building, and a lidar hit late in the flight blocks the goal's cell, so the replan from there has nowhere to go and the drone holds where it already is. It doesn't hurt these flights, but it means a goal tapped right next to a wall can turn into "can't find a way" once the lidar looks at that wall.
