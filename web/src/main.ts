@@ -12,10 +12,10 @@ import {
   buildMapArrow,
   buildOldPath,
   buildPath,
-  buildShadow,
   buildTarget,
   buildUnknown,
   buildWorld,
+  spinProps,
 } from './scene';
 
 // the physics is z up (x east, y north), so every three.js object is too
@@ -58,24 +58,30 @@ const hitBuf = new Float64Array(sim.HEAPF64.buffer, sim._hits_ptr(), 3 * MAX_HIT
 // the wind the drone feels right now, x y z
 const windBuf = new Float64Array(sim.HEAPF64.buffer, sim._wind_now(), 3);
 
-// renderer filling the window
+// phones get a smaller shadow map and fewer pixels, so the gpu keeps up
+const phone = Math.min(window.innerWidth, window.innerHeight) < 700;
+
+// renderer filling the window, with shadows on and film like tone mapping so bright sky and dark shade both keep detail
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, phone ? 2 : 1.5));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// the world, the drone, its ground shadow, the target marker and the map view arrow
+// the world, the drone, the target marker and the map view arrow
 const scene = new THREE.Scene();
-const worldMeshes = buildWorld(scene, boxes);
+const worldMeshes = buildWorld(scene, renderer, boxes, phone);
 const drone = buildDrone(sim);
 const pathLine = buildPath();
-const shadow = buildShadow();
 const target = buildTarget();
 const arrow = buildMapArrow();
 const ghost = buildGhost(sim);
 const hits = buildHits(MAX_HITS);
 const oldPath = buildOldPath();
-scene.add(drone, ghost, hits, shadow, target, arrow, pathLine, oldPath);
+scene.add(drone, ghost, hits, target, arrow, pathLine, oldPath);
 
 // the live error plot under the readout
 const plot = buildPlot(document.getElementById('plot') as HTMLCanvasElement);
@@ -217,7 +223,6 @@ function placeDrone(alpha: number) {
   qa.set(prev[7], prev[8], prev[9], prev[6]);
   qb.set(now[7], now[8], now[9], now[6]);
   drone.quaternion.slerpQuaternions(qa, qb, alpha);
-  shadow.position.set(drone.position.x, drone.position.y, 0.02);
 
   // the ghost the same way, between the last two estimates
   ghost.position.set(
@@ -452,6 +457,7 @@ function frame(t: number) {
   }
 
   placeDrone(backlog / DT);
+  spinProps(drone, now.subarray(13, 17), frameS);
   placeHits();
   placeCameras(frameS);
   renderer.render(scene, camera);
