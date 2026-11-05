@@ -79,8 +79,9 @@ export function cityGround(boxes: Float64Array) {
     for (const cy of streets)
       for (const side of [-1, 1])
         for (let k = -1.6; k <= 1.4; k += 0.6) {
-          rect(cx + k, cy + side * 2.3 - 0.4, cx + k + 0.3, cy + side * 2.3 + 0.4);
-          rect(cx + side * 2.3 - 0.4, cy + k, cx + side * 2.3 + 0.4, cy + k + 0.3);
+          // the outer crossings have no street past them, so no crosswalk out on the grass
+          if (Math.abs(cy + side * 2.3) < 31) rect(cx + k, cy + side * 2.3 - 0.4, cx + k + 0.3, cy + side * 2.3 + 0.4);
+          if (Math.abs(cx + side * 2.3) < 31) rect(cx + side * 2.3 - 0.4, cy + k, cx + side * 2.3 + 0.4, cy + k + 0.3);
         }
 
   // which lots have a building, by where each building's middle falls

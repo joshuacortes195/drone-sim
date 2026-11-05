@@ -110,7 +110,7 @@ export function buildWorld(scene: THREE.Scene, renderer: THREE.WebGLRenderer, bo
 // so the roof lands on a floor line, roofs use 4 m per tile
 function meterUVs(geo: THREE.BoxGeometry, sx: number, sy: number, sz: number) {
   const pos = geo.getAttribute('position'), nrm = geo.getAttribute('normal'), uv = geo.getAttribute('uv');
-  // whatever is left over from whole 3 m floors goes to a taller ground floor
+  // whatever is left over from whole 3 m floors ends up at the bottom, so the roof lands on a floor line
   const lobby = sz % 3;
   for (let k = 0; k < pos.count; k++) {
     const x = pos.getX(k) + sx / 2, y = pos.getY(k) + sy / 2, z = pos.getZ(k) + sz / 2;
@@ -142,7 +142,9 @@ export function buildDrone(sim: Drone) {
 
   // the body: a rounded shell on a flat deck, with the battery strapped under it
   const top = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), shell);
-  top.scale.set(0.11, 0.07, 0.04);
+  // the half sphere is built round three's y, so a quarter turn stands the dome up
+  top.rotation.x = Math.PI / 2;
+  top.scale.set(0.11, 0.04, 0.07);
   const deck = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.012, 32), carbon);
   deck.scale.set(0.11, 1, 0.07);
   deck.rotation.x = Math.PI / 2;
@@ -230,6 +232,7 @@ export function buildDrone(sim: Drone) {
   drone.traverse((o) => {
     if (o instanceof THREE.Mesh && !(o.material as THREE.Material).transparent) o.castShadow = true;
   });
+  // kept on the drone so spinProps can find them each frame
   drone.userData = { props, blurs };
   return drone;
 }

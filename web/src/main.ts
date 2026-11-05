@@ -39,8 +39,8 @@ const GOALS: [number, number, number][] = [
   [0, 0, 5],
 ];
 const ARRIVED_M = 1;
-// home is 2 m over the pad, the lawnmower search sweeps the whole flying area 6 m up, down the middle of every
-// street (rows 11.6 m apart from -29 to 29 land on the street lines), then comes home
+// home is 2 m over the pad. the lawnmower search sweeps the whole flying area 6 m up along the east west streets
+// (rows 11.6 m apart from -29 to 29 sit within 0.6 m of the street lines), then comes home
 const HOME: [number, number, number] = [0, 0, 2];
 const SEARCH_Z = 6, SEARCH_SPACING = 12, SEARCH_EDGE = 29;
 
@@ -62,12 +62,15 @@ const MAX_HITS = 16 * 180;
 const hitBuf = new Float64Array(sim.HEAPF64.buffer, sim._hits_ptr(), 3 * MAX_HITS);
 // the wind the drone feels right now, x y z
 const windBuf = new Float64Array(sim.HEAPF64.buffer, sim._wind_now(), 3);
+// the four rotor speeds inside the state, for spinning the props
+const rotors = now.subarray(13, 17);
 
-// phones get a smaller shadow map and fewer pixels, so the gpu keeps up
+// phones get a smaller shadow map so the gpu keeps up
 const phone = Math.min(window.innerWidth, window.innerHeight) < 700;
 
 // renderer filling the window, with shadows on and film like tone mapping so bright sky and dark shade both keep detail
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// pixel ratio capped at 2 on phones and 1.5 on big screens, past that it costs a lot and looks the same
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, phone ? 2 : 1.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -167,7 +170,11 @@ function goTo(i: number) {
     const t0 = performance.now();
     const n = sim._fly_to(x, y, z);
     planMs = performance.now() - t0;
-    if (n === 0) continue;
+    // a goal it can't reach gets skipped, and a mission that doesn't loop says so
+    if (n === 0) {
+      if (!loop) setReadout({ note: "skipped a goal it couldn't reach" });
+      continue;
+    }
     drawPath();
     target.position.set(x, y, z);
     goal = goals[i];
@@ -220,8 +227,14 @@ function updateMission() {
     oldPath.visible = true;
     oldPathUntil = sim._sim_tick() + 2000;
     drawPath();
+    // a failed replan leaves a hold, one point where the drone is. a mission that doesn't loop holds there and says so,
+    // instead of counting it as reached and claiming it's done
+    if (!loop && sim._path_len() <= 1) {
+      stuck = true;
+      setReadout({ note: 'the lidar found the way blocked, holding here' });
+    }
   }
-  // a hold after a failed replan is one point, so it counts as done right away and the loop moves to the next goal.
+  // on the looping route that one point hold counts as done right away, so it moves on to the next goal.
   // natively (lidar_report) the drone just stays holding
   if (stuck || finished || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
@@ -497,7 +510,7 @@ function frame(t: number) {
   }
 
   placeDrone(backlog / DT);
-  spinProps(drone, now.subarray(13, 17), frameS);
+  spinProps(drone, rotors, frameS);
   placeHits();
   placeCameras(frameS);
   renderer.render(scene, camera);

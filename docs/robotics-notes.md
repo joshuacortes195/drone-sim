@@ -420,7 +420,7 @@ Interview questions:
 
 Wind is just the air moving. What the rotors care about is the drone's speed through the air, so everywhere the rotor drag used the drone's velocity it now uses the velocity minus the wind. Hovering still in an 8 m/s breeze looks to the rotors exactly like flying at 8 m/s through still air, so the drone gets pushed downwind and has to lean into it. Riding along with the wind at its speed, it feels nothing at all. Wind gets in only through the rotor drag and the rolling moment, I don't model drag on the body.
 
-The breeze is the steady part, from the west at whatever the slider says. Gusts sit on top. Each axis is a first order gauss markov process: every step the gust fades a little toward zero and gets a random kick. The fade is e^(-dt/tau) and the kick is sigma times sqrt(1 - fade²), which is the exact version, so the gusts spread by sigma and last about tau (2 s, my pick so you can watch them) no matter the step size. The easy version, a kick of sigma times sqrt(2 dt / tau), is only right for tiny steps. At a 1 s step it spreads 1.89 m/s instead of 1.5, and a test checks exactly that.
+The breeze is the steady part, from the west at whatever the slider says. Gusts sit on top. Each axis is a first order gauss markov process: every step the gust fades a little toward zero and gets a random kick. The fade is e^(-dt/tau) and the kick is sigma times sqrt(1 - fadeÂ²), which is the exact version, so the gusts spread by sigma and last about tau (2 s, my pick so you can watch them) no matter the step size. The easy version, a kick of sigma times sqrt(2 dt / tau), is only right for tiny steps. At a 1 s step it spreads 1.89 m/s instead of 1.5, and a test checks exactly that.
 
 In a steady breeze the velocity loop's integral learns the push and the drone sits back on its spot leaning 6.5 deg into 8 m/s, within 0.3 mm. Gusts are what move it: about 7 cm rms per 1.5 m/s of gusts, and at most 0.41 m in 3 m/s gusts.
 
@@ -451,3 +451,28 @@ There's no bouncing. `crashed()` in `core/map.cpp` finds the closest point of ea
 A tap is a pixel, and the scene is 3D. three.js casts a ray from the camera through that pixel and gives back the first thing it hits: the ground, a building or a dropped box, plus which way that face points. On a roof the goal goes 2 m above it, on the ground 3 m up, and on a wall 1.5 m out in front of it so it isn't inside the margin the planner keeps around buildings. Goals stop at 18.9 m, the highest free cell under the 20 m ceiling. That works over roofs up to about 17.9 m. A roof at the full 18 m has no free cell above it, so a tap there says it can't find a way. If the planner can't get there, the drone goes back to the goal it had.
 
 Where it lives: `onTap`, `sendTo` and `dropBox` in `web/src/main.ts`, `add_box` in `wasm/bindings.cpp`.
+
+## Missions: route, search and home
+
+A mission is just a list of goals. The drone plans to the first one with A*, flies it, and once it's within 1 m of the end it plans to the next. The waypoint route loops forever. The others stop at the last goal and hold there. If the lidar finds the way blocked and the replan fails, it holds where it is and the panel says it's blocked.
+
+The search is a lawnmower pattern, the way you'd search a field: fly a row, step over, fly back the other way. `lawnmower()` in `core/route.cpp` spreads the rows evenly between the two edges with no gap wider than the spacing I ask for. If the spacing doesn't fit evenly it adds a row so the last strip doesn't get skipped. The spacing should match how far the sensor sees on each side. For the city I sweep -29 to 29 m at 6 m up with 12 m spacing. That puts the six rows along the east west streets, so the lidar sweeps the buildings on both sides, and then it comes home.
+
+Dividing the depth by the spacing in floating point can come out a hair over a whole number (2.1 / 0.3 is 7.000000000000001), and rounding that up would add an extra row. A tiny tolerance before rounding stops that, and a test checks it.
+
+Return home plans from wherever the drone is to 2 m over the pad and holds. A real one would climb to a safe height first. A* already finds a way over or around the buildings, so I skipped that.
+
+Interview questions:
+- How do you pick the row spacing for a search pattern?
+- Why spread the rows evenly instead of stepping by exactly the spacing?
+
+## Making it look like a real place
+
+This part isn't robotics. I wanted the demo to look like a real city, since the first version looked like playdough.
+- Physically based materials: each surface gets a roughness and a metalness instead of a made up shininess. Glass is smooth and reflects the sky, concrete is rough. The math keeps energy in check (a surface can't send back more light than hits it), so it looks right under any light.
+- Image based lighting: I render the sky once into a blurred environment map, and every surface picks up light from it in every direction. That soft fill does most of the work of making it not look flat.
+- Shadow maps: the sun renders the depth of the scene from where it sits. Any pixel farther from the sun than that depth is in shadow, and a few texels of blur soften the edges.
+- Tone mapping: the scene is lit in real light units and then squeezed into screen colors the way a camera does it, so the bright sky and the dark shade both keep detail.
+- The props: at hover they turn about 660 rad/s, around 105 turns a second. A 60 Hz screen only samples that every 1/60 s, so they'd look frozen or spin backwards, the wagon wheel effect. That's aliasing, what happens any time you sample a signal too slowly. So the blades turn at 4% of the real speed and a blur disc fades in as the motor speeds up, which is close to what a camera sees.
+
+Where it lives: `web/src/scene.ts` and `web/src/textures.ts`.

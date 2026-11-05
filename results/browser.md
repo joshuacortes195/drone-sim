@@ -68,3 +68,20 @@ Each physics step now also runs the IMU and the estimator, with GPS and magnetom
 The worst replan runs inside one physics step, so it holds up that frame. Natively the worst one in `results/lidar.md` is 143 ms on a quiet machine, and the review saw 164 ms in wasm with other work running.
 
 On a 390 x 844 phone viewport (Playwright, same build) there are no console errors, the map view now fits 60 m across the narrow side, the plot title stays put while hovering, and the panel and the readout don't overlap. The readout wraps to two lines.
+
+## Phase 6b page: the graphics pass (my Mac)
+
+Measured 2026-11-04 after the graphics pass (physical sky with image based lighting, a 4096 x 4096 sun shadow map over the city, painted ground and facades, the detailed quad with spinning props).
+
+- Machine: Intel Mac, i5-8259U with Intel Iris Plus Graphics 655 (ANGLE on Metal), 8 GB, macOS 15.7.7
+- Browser: Chrome 155 from agent-browser 0.39.1, headed, 1400 x 850 window at a device pixel ratio of 1, only this tab open
+- Page: the Vite dev server, wasm built with emcc 6.0.12 (Release), seed 1, the default waypoint route, rtk gps, no wind
+- How: 20 readings of the page's own readout 2.5 s apart in the chase view, then 20 in the map view. Each reading covers the last half second
+
+| | chase view | map view |
+|---|---|---|
+| frame rate | 60 fps in all 20 | 60 fps in all 20 |
+| physics steps per second | 983 to 1002, median 1000 | 980 to 1002, median 1000 |
+| physics time per frame | 0.41 to 0.99 ms, median 0.60 | 0.43 to 1.09 ms, median 0.56 |
+
+60 fps is this display's refresh rate, so the frame rate is capped there and I can't tell how much headroom is left. The physics kept real time. Two pages rendering at once on this GPU (the desktop page and a phone sized one) dropped to 10 fps and 280 steps/s, so measure with one tab. A phone sized window (390 x 844 at a pixel ratio of 3, so 2 after the page's cap, and a 2048 shadow map) also read 60 fps in 3 readings, alone, in Chrome's device emulation on this Mac, not on a real phone.

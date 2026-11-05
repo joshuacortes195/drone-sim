@@ -108,3 +108,9 @@ TEST_CASE("lawnmower: an area with no depth is one row") {
   CHECK(norm(got[0] - Vec3{0, 2, 5}) < 1e-12);
   CHECK(norm(got[1] - Vec3{6, 2, 5}) < 1e-12);
 }
+
+TEST_CASE("lawnmower: rounding in the division doesn't add a row") {
+  // 2.1 / 0.3 comes out a hair over 7 in floating point, it should still be 7 gaps (8 rows), not 8
+  std::vector<Vec3> got = lawnmower(0, 0, 1, 2.1, 2, 0.3);
+  CHECK(got.size() == 16);
+}

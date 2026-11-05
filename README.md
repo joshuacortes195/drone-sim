@@ -1,10 +1,10 @@
 # drone-sim
 
-An autonomous quadcopter simulator that runs in the browser. The drone has real flight physics, plans its own path through a city of boxes, follows it with a cascaded PID flight controller, sees obstacles with a simulated lidar and works out where it is from noisy sensors. You can tap to give it a goal, drop boxes in its way and turn on wind. Mission presets and a graphics pass come next (phase 6b in the plan).
+An autonomous quadcopter simulator that runs in the browser. The drone has real flight physics, plans its own path through a city of boxes, follows it with a cascaded PID flight controller, sees obstacles with a simulated lidar and works out where it is from noisy sensors. You can tap to give it a goal, drop boxes in its way, turn on wind, or send it on a preset mission: a waypoint route, a lawnmower search of the whole city, or back home.
 
 The physics, control, planning and estimation are written in C++ and tested natively. The same code is compiled to WebAssembly for the browser, where three.js draws the scene.
 
-Status: phases 0 to 5 of 7 are done.
+Status: phases 0 to 6 of 7 are done. Phase 7 (a batch evaluation over many maps, a UI pass and the deploy) is next.
 
 The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.119 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
 
@@ -77,6 +77,10 @@ npm run dev
 ```
 
 The drone flies a loop of planned paths through a seeded city, with the planned path drawn in teal. The blue ghost is where the drone thinks it is, the magenta dots are the last lidar turn, and the outlined cube is one it wasn't told about. It drops onto the first leg once the drone is moving, so you can watch the lidar find it and the path get redrawn, with the old path faded for 2 s. The plot in the corner is how far the estimate is from the real drone, averaged over each 0.1 s. Press `c` or the button to switch between the chase camera and the map view.
+
+The scene is lit like a real place: a physical sky that also lights everything through an environment map, a sun with soft shadows over the whole city, streets with lane lines and crosswalks, a landing pad at home, and buildings in glass, concrete and brick whose windows pick up the sky. The drone has carbon arms, metal motors, landing legs and a GPS mast. Its props really turn, at a slowed down rate because the real 660 rad/s hover speed would just flicker on a 60 Hz screen, and they fade into a blur disc as the motors speed up. With all of that it still held 60 fps on my Intel Mac ([results/browser.md](results/browser.md)).
+
+The mission buttons pick what it flies. Route is the loop above. Search is a lawnmower pattern: rows back and forth over the whole flying area at 6 m, spaced so they run along the east west streets, and then it comes home. Go home plans straight back to 2 m over the pad and holds there. Each leg still goes through A*, so a box you drop in the way gets planned around.
 
 The panel on the side lets you tap the city to set a goal (it stops the tour until you reset) or drop a 2 m box the drone doesn't know about, set a breeze from the west and gusts, switch to a regular GPS and fly on the real position instead of the estimate. If the drone hits something it stops and a banner offers a reset. Frame rate and physics numbers are in [results/browser.md](results/browser.md).
 
