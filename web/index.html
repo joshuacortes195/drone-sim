@@ -7,22 +7,34 @@
     <!-- empty icon so the browser stops asking for a favicon.ico that isn't there -->
     <link rel="icon" href="data:," />
     <style>
+      /* colors shared by every panel: ink for text, muted for notes, line for borders, teal for what's picked */
+      :root {
+        --ink: #1d2733; --muted: #4f5b69; --line: #9aa7b6; --accent: #2a9d8f; --accent-strong: #1f7a70;
+        --glass: rgba(255, 255, 255, 0.82);
+      }
       /* full screen page for the 3d view */
       html, body { margin: 0; height: 100%; overflow: hidden; background: #cfd8e3; }
+      /* frosted look for everything floating over the scene, so it reads against sky, glass and asphalt alike */
+      .bar span, .bar button, .panel, .controls {
+        background: var(--glass); border: 1px solid rgba(29, 39, 51, 0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      }
+      /* a clear ring on whatever the keyboard is on */
+      button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
       canvas { display: block; }
       /* styling for the readout and camera button in the top left corner */
       .bar {
         position: fixed; top: 8px; left: 8px; right: 264px;
         display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-        font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
+        font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink);
       }
-      .bar span { padding: 4px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.75); }
-      .bar button { font: inherit; color: #1d2733; background: #fff; border: 1px solid #9aa7b6; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+      .bar span { padding: 4px 8px; border-radius: 6px; }
+      .bar button { font: inherit; color: var(--ink); border-radius: 6px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
       /* styling for the bottom left panel with the error plot and the color key */
       .panel {
         position: fixed; left: 8px; bottom: 8px; width: min(340px, calc(100vw - 32px));
-        padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.85);
-        font: 11px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
+        padding: 8px; border-radius: 8px; box-sizing: border-box;
+        font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--ink);
       }
       .panel canvas { width: 100%; height: 110px; touch-action: none; }
       /* one row of keys, each a small mark in its color and a name */
@@ -33,27 +45,29 @@
       /* styling for the controls panel in the top right corner */
       .controls {
         position: fixed; top: 8px; right: 8px; width: 240px; box-sizing: border-box;
-        padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.85);
-        font: 12px/1.4 ui-monospace, Menlo, monospace; color: #1d2733;
+        padding: 10px; border-radius: 8px;
+        font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink);
       }
       .controls header { display: flex; align-items: center; }
       .controls h1 { flex: 1; margin: 0; font-size: 12px; font-weight: 600; }
-      .controls .body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-      .controls button { font: inherit; color: #1d2733; background: #fff; border: 1px solid #9aa7b6; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+      .controls .body { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+      .controls button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; min-height: 28px; cursor: pointer; }
+      .controls button:hover, .bar button:hover { border-color: var(--ink); }
       .controls label { display: flex; flex-direction: column; gap: 2px; }
-      .controls input[type='range'] { accent-color: #2a9d8f; margin: 0; }
+      .controls input[type='range'] { accent-color: var(--accent); margin: 0; }
       /* the two checkboxes sit beside their text */
       .controls label.check { flex-direction: row; align-items: flex-start; gap: 6px; }
-      .controls label.check input { margin: 2px 0 0; accent-color: #2a9d8f; }
+      .controls label.check input { margin: 2px 0 0; accent-color: var(--accent); }
       /* goal or box buttons side by side, the picked one filled in */
       .controls fieldset { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; }
-      .controls legend { padding: 0; margin-bottom: 4px; }
-      .controls button[aria-pressed='true'] { background: #2a9d8f; border-color: #2a9d8f; color: #fff; }
+      .controls legend { padding: 0; margin-bottom: 4px; color: var(--muted); }
+      /* the picked button filled in, dark enough teal that the white text stays readable */
+      .controls button[aria-pressed='true'] { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
       /* the wind arrow and its speed */
       .wind { display: flex; align-items: center; gap: 6px; }
-      .wind svg { fill: #1d2733; }
-      .wind .ring { fill: none; stroke: #9aa7b6; }
-      .status { margin: 8px 0 0; color: #5b6776; }
+      .wind svg { fill: var(--ink); }
+      .wind .ring { fill: none; stroke: var(--line); }
+      .status { margin: 8px 0 0; color: var(--muted); }
       /* red banner across the top when the drone hits something */
       .crash {
         position: fixed; top: 48px; left: 50%; transform: translateX(-50%);
@@ -61,10 +75,19 @@
         font: 600 14px/1.4 ui-monospace, Menlo, monospace;
       }
       .crash button { margin-left: 10px; font: inherit; color: #b3261e; background: #fff; border: 0; border-radius: 6px; padding: 2px 10px; cursor: pointer; }
-      /* on a narrow screen the readout gets the full width and the controls drop below it */
+      /* fingers need bigger targets than a mouse */
+      @media (pointer: coarse) {
+        .bar button, .controls button { min-height: 40px; padding: 6px 12px; }
+        .controls input[type='range'] { height: 28px; }
+      }
+      /* on a narrow screen the readout and the controls each get the full width, the controls scroll inside
+         themselves instead of covering the city, and the plot gets shorter */
       @media (max-width: 700px) {
         .bar { right: 8px; }
-        .controls { top: 96px; }
+        .controls { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 55vh; overflow-y: auto; }
+        .panel { bottom: auto; top: 96px; right: 8px; width: auto; padding: 6px; }
+        .panel canvas { height: 64px; }
+        .key { display: none; }
       }
     </style>
   </head>

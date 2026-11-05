@@ -17,8 +17,8 @@ export interface Actions {
 // slider ranges: breeze up to 8 m/s (the hover test's breeze), gusts up to 3 m/s
 const BREEZE_MAX = 8, GUSTS_MAX = 3;
 
-// phones start with the panel folded up so the sim gets the whole screen
-const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+// phones and narrow windows start with the panel folded up so the sim gets the whole screen
+const FOLDED = window.matchMedia('(pointer: coarse), (max-width: 700px)').matches;
 
 // the wind right now: speed plus an arrow pointing the way it blows, north up like the map view
 function WindReadout() {
@@ -90,7 +90,7 @@ export function CrashBanner({ onReset }: { onReset: () => void }) {
 
 // the control panel in the top right corner: wind sliders, sensor toggles, what a tap does, reset
 export function Panel({ actions }: { actions: Actions }) {
-  const [open, setOpen] = useState(!TOUCH);
+  const [open, setOpen] = useState(!FOLDED);
   const [breeze, setBreeze] = useState(0);
   const [gusts, setGusts] = useState(0);
   const [noisyGps, setNoisyGps] = useState(false);
