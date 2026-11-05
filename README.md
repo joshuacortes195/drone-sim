@@ -2,9 +2,30 @@
 
 An autonomous quadcopter simulator that runs in the browser. The drone has real flight physics, plans its own path through a city of boxes, follows it with a cascaded PID flight controller, sees obstacles with a simulated lidar and works out where it is from noisy sensors. You can tap to give it a goal, drop boxes in its way, turn on wind, or send it on a preset mission: a waypoint route, a lawnmower search of the whole city, or back home.
 
+Try it live: https://joshuacortes195.github.io/drone-sim/
+
+![The drone flying past brick, glass and concrete buildings in the chase view, with the control panel on the right](docs/images/chase.jpg)
+
+![The map view during the lawnmower search: the drone working down a street, lidar hits on the building edges](docs/images/map.jpg)
+
 The physics, control, planning and estimation are written in C++ and tested natively. The same code is compiled to WebAssembly for the browser, where three.js draws the scene.
 
-Status: phases 0 to 6 of 7 are done. Phase 7 (a batch evaluation over many maps, a UI pass and the deploy) is next.
+Status: phases 0 to 6 are done, and most of phase 7: the batch evaluation, the UI pass and the deploy. Still to do are gifs for this page and a rerun of the evaluation on my PC (the numbers below are from my Intel Mac).
+
+## Numbers
+
+Over 1000 seeded cities with a random trip in each, flying the whole stack (planning, the RTK estimate, the lidar and replanning), every flight in calm air reached its goal, and 999 of 1000 did in a 4 m/s breeze with 1.5 m/s gusts ([results/eval.md](results/eval.md)).
+
+| | calm | windy |
+|---|---|---|
+| success (within 1 m of the goal, no crash, inside 120 s) | 1000 / 1000 | 999 / 1000 |
+| tracking error, rms per flight, median | 0.109 m | 0.144 m |
+| estimation error, rms per flight, median | 0.013 m | 0.013 m |
+| off the goal at the end, median | 0.081 m | 0.098 m |
+| planning time (A* + smoothing), median | 10.9 ms | |
+| path length / straight line, median | 1.009 | |
+
+The one crash was a goal right next to a building in the wind: the planner leaves 0.43 m of slack past the drone's reach, and a gust pushed it 0.8 m off on the last leg. The rest of the numbers, from the physics up, are in [results/](results/).
 
 The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.119 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
 
@@ -66,9 +87,15 @@ To print the wind numbers in [results/wind.md](results/wind.md) (540 hovers in b
 ./build/wind_report
 ```
 
+To run the batch evaluation in [results/eval.md](results/eval.md) (a random trip over each of 1000 seeded cities, calm and windy, about 4.5 minutes on my Mac). Pass a smaller count to try it quickly:
+
+```bash
+./build/batch_eval 1000
+```
+
 ## Run it in the browser
 
-You'll need Node 22+. The compiled wasm is checked in, so this works without Emscripten:
+Every push to main runs the C++ tests and builds the page on GitHub Actions, then puts it on GitHub Pages (`.github/workflows/deploy.yml`). To run it yourself you'll need Node 22+. The compiled wasm is checked in, so this works without Emscripten:
 
 ```bash
 cd web

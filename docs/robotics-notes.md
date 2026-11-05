@@ -476,3 +476,16 @@ This part isn't robotics. I wanted the demo to look like a real city, since the 
 - The props: at hover they turn about 660 rad/s, around 105 turns a second. A 60 Hz screen only samples that every 1/60 s, so they'd look frozen or spin backwards, the wagon wheel effect. That's aliasing, what happens any time you sample a signal too slowly. So the blades turn at 4% of the real speed and a blur disc fades in as the motor speeds up, which is close to what a camera sees.
 
 Where it lives: `web/src/scene.ts` and `web/src/textures.ts`.
+
+## Evaluating the whole thing
+
+Each part has its own numbers. This one checks whether the drone actually gets where it's sent. `tools/batch_eval.cpp` builds 1000 seeded cities, picks a random start and goal in each (at least 20 m apart), plans, and flies the whole stack: the RTK estimate, the lidar, replanning and the crash check, the same as the page. Every trip flies twice with the same sensor noise, once in calm air and once in a 4 m/s breeze with 1.5 m/s gusts, so the only difference between the two is the wind.
+
+I decided what success means before running it: no crash, done inside 120 s, and the real drone (not the estimate) within 1 m of the goal at the end. It got 1000 of 1000 calm and 999 of 1000 windy.
+
+Here's why the one failure happened. The planner grows every building by 0.79 m, and the drone reaches 0.356 m from its center, so there's 0.43 m of slack. That's plenty in calm air, where the worst tracking error was 0.47 m rms over a whole flight, but most of a flight is in open street. On seed 962 the goal sat right next to a wall, and a gust on the last 1 m leg pushed the drone 0.8 m off, so its reach touched the wall. The fix would be a bigger margin when it's windy, or slowing down next to walls, but changing the margin changes every planning number before it, so I left it and wrote it down.
+
+Interview questions:
+- How do you define success for an autonomy test before you run it?
+- Why fly the same trip with the same noise in both winds?
+- Where does a planning margin come from, and what eats into it?

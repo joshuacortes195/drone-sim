@@ -177,6 +177,8 @@ Split in two: 6a controls, 6b presets and the graphics pass.
 - `tools/batch_eval.cpp`: many seeded maps (the count set by how long it takes), random start and goal, wind on and off. Records success rate, planning time, path length divided by straight line distance, tracking error and estimation error into `results/eval.md` with machine, seeds, map settings, gains, timestep and build flags
 - success means within 1 m of the goal, no collision, inside a time limit
 - UI pass (impeccable), README with gifs and the numbers table, Netlify deploy, final breakdown update
+- 7 done on the Mac (2026-11-04): `tools/batch_eval.cpp` over 1000 cities, success 1000 of 1000 calm and 999 of 1000 in a 4 m/s breeze with 1.5 m/s gusts (`results/eval.md`). The one crash is a goal next to a building where a gust beat the 0.43 m of slack the margin leaves past the drone's reach. UI pass: frosted panels, contrast on picked buttons, focus rings, bigger touch targets, a bottom sheet on narrow screens. Deployed to GitHub Pages instead of Netlify (no Netlify login on hand, and Pages deploys from the repo with the tests gating it): https://joshuacortes195.github.io/drone-sim/. README has screenshots and the numbers table
+- still to do: gifs (no ffmpeg on the Mac), the eval rerun on the PC, a check on a real phone
 
 ## How I'll measure things
 
