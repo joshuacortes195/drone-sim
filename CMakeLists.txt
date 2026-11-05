@@ -57,6 +57,11 @@ if(NOT EMSCRIPTEN)
   add_executable(wind_report tools/wind_report.cpp)
   target_compile_options(wind_report PRIVATE ${WARN_FLAGS})
   target_link_libraries(wind_report PRIVATE core)
+
+  # flies random trips over many seeded cities in calm air and wind for results/eval.md
+  add_executable(batch_eval tools/batch_eval.cpp)
+  target_compile_options(batch_eval PRIVATE ${WARN_FLAGS})
+  target_link_libraries(batch_eval PRIVATE core)
 endif()
 
 # browser build: the core plus the bindings, written straight into the web app as an es module and a .wasm file
