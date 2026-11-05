@@ -267,6 +267,21 @@ EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
 }
 EMSCRIPTEN_KEEPALIVE double* path_ptr() { return path_buf; }
 
+// a lawnmower search over x0..x1, y0..y1 at height z, rows at most spacing apart. writes the row ends into
+// route_buf and says how many points there are, the page then flies them one by one
+static double route_buf[3 * 64];
+EMSCRIPTEN_KEEPALIVE int lawnmower_route(double x0, double y0, double x1, double y1, double z, double spacing) {
+  std::vector<Vec3> pts = lawnmower(x0, y0, x1, y1, z, spacing);
+  int n = std::min<int>(int(pts.size()), 64);
+  for (int i = 0; i < n; i++) {
+    route_buf[3 * i] = pts[i].x;
+    route_buf[3 * i + 1] = pts[i].y;
+    route_buf[3 * i + 2] = pts[i].z;
+  }
+  return n;
+}
+EMSCRIPTEN_KEEPALIVE double* route_ptr() { return route_buf; }
+
 // the path after a replan: how many waypoints, and how many replans so far so the page knows to redraw
 EMSCRIPTEN_KEEPALIVE int path_len() { return int(path.size()); }
 EMSCRIPTEN_KEEPALIVE int replan_count() { return replans; }

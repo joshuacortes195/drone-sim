@@ -85,3 +85,17 @@ Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double a
   // past the end: hold the last point, still facing along the last leg that moved sideways
   return sp;
 }
+
+std::vector<Vec3> lawnmower(double x0, double y0, double x1, double y1, double z, double spacing) {
+  // enough gaps that none is wider than spacing, then spread the rows evenly so both edges get a row
+  int gaps = int(std::ceil((y1 - y0) / spacing - 1e-9));
+  std::vector<Vec3> pts;
+  for (int r = 0; r <= gaps; r++) {
+    double y = gaps == 0 ? y0 : y0 + (y1 - y0) * r / gaps;
+    // even rows go west to east, odd rows come back
+    double a = r % 2 == 0 ? x0 : x1, b = r % 2 == 0 ? x1 : x0;
+    pts.push_back({a, y, z});
+    pts.push_back({b, y, z});
+  }
+  return pts;
+}

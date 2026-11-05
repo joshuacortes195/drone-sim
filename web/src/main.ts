@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import createDrone from './wasm/drone.js';
 import { Panel, type Actions, type TapMode } from './Panel';
+import type { Mission } from './store';
 import { setReadout } from './store';
 import { buildPlot } from './plot';
 import {
@@ -28,7 +29,7 @@ const MAX_FRAME_S = 0.1;
 
 // which seeded city to fly in
 const SEED = 1;
-// demo loop over street crossings at different heights, the low ones make it weave between buildings.
+// the waypoint route: a loop over street crossings at different heights, the low ones make it weave between buildings.
 // the next goal is planned once the path is done and the drone is within 1 m of its end
 const GOALS: [number, number, number][] = [
   [18, 18, 4],
@@ -38,6 +39,10 @@ const GOALS: [number, number, number][] = [
   [0, 0, 5],
 ];
 const ARRIVED_M = 1;
+// home is 2 m over the pad, the lawnmower search sweeps the whole flying area 6 m up, down the middle of every
+// street (rows 11.6 m apart from -29 to 29 land on the street lines), then comes home
+const HOME: [number, number, number] = [0, 0, 2];
+const SEARCH_Z = 6, SEARCH_SPACING = 12, SEARCH_EDGE = 29;
 
 // loads the wasm physics and starts the drone hovering just off the ground at the origin
 const sim = await createDrone();
@@ -131,8 +136,11 @@ let planMs = 0;
 let pathEnd = [0, 0, 0];
 let stuck = false;
 let replans = 0;
-// true while it flies the built in tour, a goal picked by tapping turns it off until reset
-let demo = true;
+// the mission it's flying: its list of goals, whether it starts over after the last one, and whether it's done
+let mission: Mission = 'route';
+let goals = GOALS;
+let loop = true;
+let finished = false;
 // the goal it's flying to right now, so a tap it can't reach can put it back on course
 let goal = GOALS[0];
 
@@ -145,15 +153,24 @@ function drawPath() {
 }
 
 function goTo(i: number) {
-  for (let tries = 0; tries < GOALS.length; tries++, i = (i + 1) % GOALS.length) {
-    const [x, y, z] = GOALS[i];
+  for (let tries = 0; tries < goals.length; tries++, i++) {
+    // past the last goal: a loop starts over, anything else is done and holds where it is
+    if (i >= goals.length) {
+      if (!loop) {
+        finished = true;
+        setReadout({ done: true });
+        return;
+      }
+      i = 0;
+    }
+    const [x, y, z] = goals[i];
     const t0 = performance.now();
     const n = sim._fly_to(x, y, z);
     planMs = performance.now() - t0;
     if (n === 0) continue;
     drawPath();
     target.position.set(x, y, z);
-    goal = GOALS[i];
+    goal = goals[i];
     leg = i;
     return;
   }
@@ -206,9 +223,9 @@ function updateMission() {
   }
   // a hold after a failed replan is one point, so it counts as done right away and the loop moves to the next goal.
   // natively (lidar_report) the drone just stays holding
-  if (stuck || !demo || !sim._path_done()) return;
+  if (stuck || finished || !sim._path_done()) return;
   const dx = now[0] - pathEnd[0], dy = now[1] - pathEnd[1], dz = now[2] - pathEnd[2];
-  if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo((leg + 1) % GOALS.length);
+  if (dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M) goTo(leg + 1);
 }
 
 // draws the drone part way between the last two physics states, alpha is how far past the older one we are
@@ -313,14 +330,38 @@ function sendTo(x: number, y: number, z: number) {
     setReadout({ note: "can't find a way there, try another spot" });
     return;
   }
+  // a tapped goal is a mission of one: fly there and hold
   goal = [x, y, z];
-  demo = false;
-  stuck = false;
+  goals = [goal];
+  mission = 'goal';
+  loop = finished = stuck = false;
+  leg = 0;
   // the tour's hidden cube would drop in on a path nobody is flying any more
   cube = null;
   drawPath();
   target.position.set(x, y, z);
-  setReadout({ demo: false, note: '' });
+  setReadout({ mission, done: false, note: '' });
+}
+
+// the lawnmower rows from the core, then home at the end
+function searchGoals() {
+  const n = sim._lawnmower_route(-SEARCH_EDGE, -SEARCH_EDGE, SEARCH_EDGE, SEARCH_EDGE, SEARCH_Z, SEARCH_SPACING);
+  const pts = new Float64Array(sim.HEAPF64.buffer, sim._route_ptr(), 3 * n);
+  const rows: [number, number, number][] = [];
+  for (let i = 0; i < n; i++) rows.push([pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]]);
+  return [...rows, HOME];
+}
+
+// starts a preset from wherever the drone is: the waypoint route (loops), the lawnmower search or return to home
+function startMission(m: Mission) {
+  mission = m;
+  goals = m === 'route' ? GOALS : m === 'search' ? searchGoals() : [HOME];
+  loop = m === 'route';
+  finished = stuck = false;
+  // the tour's hidden cube only belongs to the first route after a reset
+  cube = null;
+  goTo(0);
+  setReadout({ mission, done: false, note: stuck ? "can't find a way to any of its goals" : '' });
 }
 
 // drops a 2 m cube where the tap landed: on top of a roof or the ground, or up against a wall.
@@ -386,11 +427,9 @@ function resetAll() {
   backlog = 0;
   oldPath.visible = false;
   plot.clear();
-  demo = true;
-  stuck = false;
-  goTo(0);
+  startMission('route');
   if (!stuck) hideCube();
-  setReadout({ crashed: false, demo: true, note: '' });
+  setReadout({ crashed: false });
 }
 
 // what the panel's controls do to the sim
@@ -405,6 +444,7 @@ const actions: Actions = {
     tapMode = mode;
   },
   reset: resetAll,
+  startMission,
 };
 createRoot(document.getElementById('controls')!).render(createElement(Panel, { actions }));
 

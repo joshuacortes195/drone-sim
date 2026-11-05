@@ -75,3 +75,36 @@ TEST_CASE("follow: keeps the heading it started with until a leg moves sideways"
   CHECK(norm(one.pos - Vec3{1, 2, 3}) < 1e-12);
   CHECK(one.yaw == doctest::Approx(-1.0));
 }
+
+TEST_CASE("lawnmower: rows across the area, back and forth, worked by hand") {
+  // 10 m wide, 12 m deep, rows 6 m apart: three rows, each flown the other way from the last
+  std::vector<Vec3> want = {{0, 0, 8}, {10, 0, 8}, {10, 6, 8}, {0, 6, 8}, {0, 12, 8}, {10, 12, 8}};
+  std::vector<Vec3> got = lawnmower(0, 0, 10, 12, 8, 6);
+  REQUIRE(got.size() == want.size());
+  for (size_t i = 0; i < want.size(); i++) CHECK(norm(got[i] - want[i]) < 1e-12);
+}
+
+TEST_CASE("lawnmower: spacing that doesn't fit evenly still reaches both edges, no gap wider than asked") {
+  // 10 m deep at 4 m: three gaps of 3.33 m instead of leaving the last 2 m unsearched
+  std::vector<Vec3> got = lawnmower(-5, 0, 5, 10, 3, 4);
+  REQUIRE(got.size() == 8);
+  CHECK(got.front().y == doctest::Approx(0));
+  CHECK(got.back().y == doctest::Approx(10));
+  for (size_t i = 0; i < got.size(); i += 2) {
+    // each row runs straight across at one y, the full width, and the next one turns back
+    CHECK(got[i].y == got[i + 1].y);
+    CHECK(std::abs(got[i].x - got[i + 1].x) == doctest::Approx(10));
+    if (i + 2 < got.size()) {
+      CHECK(got[i + 2].x == got[i + 1].x);
+      CHECK(got[i + 2].y - got[i].y == doctest::Approx(10.0 / 3));
+    }
+  }
+  for (const Vec3& p : got) CHECK(p.z == 3);
+}
+
+TEST_CASE("lawnmower: an area with no depth is one row") {
+  std::vector<Vec3> got = lawnmower(0, 2, 6, 2, 5, 4);
+  REQUIRE(got.size() == 2);
+  CHECK(norm(got[0] - Vec3{0, 2, 5}) < 1e-12);
+  CHECK(norm(got[1] - Vec3{6, 2, 5}) < 1e-12);
+}

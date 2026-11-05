@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { getReadout, subscribe } from './store';
+import { getReadout, subscribe, type Mission } from './store';
 
 // what a tap on the 3d view does
 export type TapMode = 'goal' | 'box';
@@ -11,6 +11,7 @@ export interface Actions {
   setTruth(on: boolean): void;
   setTapMode(mode: TapMode): void;
   reset(): void;
+  startMission(m: Mission): void;
 }
 
 // slider ranges: breeze up to 8 m/s (the hover test's breeze), gusts up to 3 m/s
@@ -36,10 +37,44 @@ function WindReadout() {
   );
 }
 
+// what the status line says for each mission while flying and once it's done
+const FLYING: Record<Mission, string> = {
+  route: 'flying the waypoint route',
+  search: 'searching the city row by row, then home',
+  home: 'heading back to the home pad',
+  goal: 'flying to your goal',
+};
+const DONE: Record<Mission, string> = {
+  route: 'flying the waypoint route',
+  search: 'search done, holding over home',
+  home: 'holding over home',
+  goal: 'holding at your goal',
+};
+
+// the preset buttons, the one it's flying filled in
+const PRESETS: [Mission, string][] = [
+  ['route', 'route'],
+  ['search', 'search'],
+  ['home', 'go home'],
+];
+function Presets({ onStart }: { onStart: (m: Mission) => void }) {
+  const mission = useSyncExternalStore(subscribe, () => getReadout().mission);
+  return (
+    <fieldset className="tap">
+      <legend>mission</legend>
+      {PRESETS.map(([m, label]) => (
+        <button key={m} aria-pressed={mission === m} onClick={() => onStart(m)}>
+          {label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
 // what the drone is up to, or why the last tap didn't do anything
 function Status() {
   const r = useSyncExternalStore(subscribe, getReadout);
-  const text = r.note || (r.demo ? 'flying the tour' : 'flying to your goal, reset to restart the tour');
+  const text = r.note || (r.done ? DONE[r.mission] : FLYING[r.mission]);
   return <p className="status" aria-live="polite">{text}</p>;
 }
 
@@ -104,6 +139,7 @@ export function Panel({ actions }: { actions: Actions }) {
         </header>
         {open ? (
           <div className="body">
+            <Presets onStart={actions.startMission} />
             <fieldset className="tap">
               <legend>tap the city to</legend>
               <button aria-pressed={tapMode === 'goal'} onClick={() => pickTap('goal')}>
