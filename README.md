@@ -14,22 +14,22 @@ Status: phases 0 to 6 are done, and most of phase 7: the batch evaluation, the U
 
 ## Numbers
 
-Over 1000 seeded cities with a random trip in each, flying the whole stack (planning, the RTK estimate, the lidar and replanning), every flight in calm air reached its goal, and 999 of 1000 did in a 4 m/s breeze with 1.5 m/s gusts ([results/eval.md](results/eval.md)).
+Over 1000 seeded cities with a random trip in each, flying the whole stack (planning, the RTK estimate, the lidar and replanning), every flight reached its goal, in calm air and in a 4 m/s breeze with 1.5 m/s gusts ([results/eval.md](results/eval.md)).
 
 | | calm | windy |
 |---|---|---|
-| success (within 1 m of the goal, no crash, inside 120 s) | 1000 / 1000 | 999 / 1000 |
-| tracking error, rms per flight, median | 0.109 m | 0.145 m |
+| success (within 1 m of the goal, no crash, inside 120 s) | 1000 / 1000 | 1000 / 1000 |
+| tracking error, rms per flight, median | 0.104 m | 0.142 m |
 | estimation error, rms per flight, median | 0.013 m | 0.013 m |
-| off the goal at the end, median | 0.081 m | 0.097 m |
+| off the goal at the end, median | 0.078 m | 0.095 m |
 | planning time (A* + smoothing), median | 10.4 ms | |
 | path length / straight line, median | 1.009 | |
 
-The one crash was a short downwind leg ending next to a building: a gust pushed the drone past its setpoint, braking against the breeze tilted it past what the motors can hold altitude at, and it sank and swung into the wall. The rest of the numbers, from the physics up, are in [results/](results/).
+The first run had one crash in the wind, on a short downwind leg ending next to a building. The controller only asked for 34° of tilt, but the drone tipped to 53°: braking near full thrust, the mixer kept the total thrust exact and could only give the attitude loop about a fifth of the torque it needed. Now roll and pitch come before thrust in the mixer, the tilt peaks at 35.5° on that trip, and all 1000 make it. The rest of the numbers, from the physics up, are in [results/](results/).
 
-The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.119 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
+The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate, then thrust, and keeps roll and pitch. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.114 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
 
-For planning, a seed builds a city of buildings, and 26 neighbor A* searches a 0.5 m voxel grid with the buildings grown by the drone's size, then line of sight smoothing cuts the path down. Across 200 random trips the smoothed path is 0.5% longer than a straight line at the median and takes 7.6 ms to plan in the browser. Flying each one, the worst tracking error is 0.43 m and the drone's center never gets closer than 0.68 m to a building ([results/planning.md](results/planning.md)).
+For planning, a seed builds a city of buildings, and 26 neighbor A* searches a 0.5 m voxel grid with the buildings grown by the drone's size, then line of sight smoothing cuts the path down. Across 200 random trips the smoothed path is 0.5% longer than a straight line at the median and takes 7.6 ms to plan in the browser. Flying each one, the worst tracking error is 0.91 m (a hard turn where the mixer traded some height for attitude) and the drone's center never gets closer than 0.67 m to a building ([results/planning.md](results/planning.md)).
 
 The drone works out where it is from simulated sensors with noise from real data sheets, using a Kalman filter for position and a complementary filter for attitude. With an RTK GPS the estimate is 1.1 cm RMS off and the planned flights are as safe as flying on the truth. A regular GPS puts 51 of 200 flights within reach of a building ([results/estimation.md](results/estimation.md)).
 

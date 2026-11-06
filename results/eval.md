@@ -1,6 +1,6 @@
 # Batch evaluation (phase 7)
 
-Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`. The headline run is meant for my PC like phases 4 to 6a, so this table gets rerun there and both kept, labeled.
+Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`, then rerun 2026-11-05 on the same Mac after the mixer change that fixed the one crash (see "The crash"). The results table is the rerun. The headline run is meant for my PC like phases 4 to 6a, so this table gets rerun there and both kept, labeled.
 
 ## How
 
@@ -13,17 +13,30 @@ Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`. The headline ru
 - winds: every trip flown twice, once in calm air and once in a 4 m/s breeze from the west plus 1.5 m/s gusts (gauss markov, tau 2 s, the middle of the `results/wind.md` grid, gust seed `seed + 10000`). Both flights start from the same sensor seed (`seed + 30000`), so they have the same starting biases. The noise doesn't stay in step after that: the lidar takes one noise draw per hit, and a drone leaning into the wind hits a different number of things
 - a flight ends 3 s after the setpoint reaches the end of the path, or on a crash (`crashed()`: the drone's center within its 0.356 m reach of a building or the ground), or at 120 s
 - success: no crash, inside 120 s, and the real drone within 1 m of the goal at the end. A trip with no plan would count as a failure in both winds (there were none)
-- tracking error: rms of the real drone's distance from the setpoint over every step flown, including the 3 s hold at the goal (about a fifth of a median flight), which is why it comes out below the 0.119 m in `results/control.md` for flying a route. Estimation error: rms of the estimate's distance from the real drone
+- tracking error: rms of the real drone's distance from the setpoint over every step flown, including the 3 s hold at the goal (about a fifth of a median flight), which is why it comes out below the 0.114 m in `results/control.md` for flying a route. Estimation error: rms of the estimate's distance from the real drone
 - crashed flights are left out of the error and time stats, so a crash doesn't read as a tracking or goal error
-- whole run: 245.6 s for 2000 flights. Run with `./build/batch_eval 1000`
+- whole run: 245.6 s for 2000 flights on an idle machine (2026-11-04). The 2026-11-05 rerun shared the machine with a compile and two other runs and took 1482 s, so its times aren't used: the planning times below are from 2026-11-04 (same planner, same trips, same paths), and the replans are only counted. Run with `./build/batch_eval 1000`
 
 ## Results
 
 | | calm | 4 m/s breeze + 1.5 m/s gusts |
 |---|---|---|
+| success | 1000 of 1000 (100%) | 1000 of 1000 (100%) |
+| crashed | 0 | 0 |
+| out of time / ended over 1 m away | 0 / 0 | 0 / 0 |
+| tracking error, rms per flight (median, p95, worst) | 0.104, 0.152, 0.658 m | 0.142, 0.186, 0.469 m |
+| estimation error, rms per flight (median, p95, worst) | 0.013, 0.015, 0.021 m | 0.013, 0.015, 0.021 m |
+| off the goal at the end (median, p95, worst) | 0.078, 0.114, 0.254 m | 0.095, 0.181, 0.383 m |
+| flight time (median, p95, worst) | 13.90, 20.11, 30.56 s | 13.90, 20.11, 30.56 s |
+| replans | 22, at most 2 per flight | 16, at most 1 per flight |
+| a replan found no path | 4 | 7 |
+
+Before the mixer change (2026-11-04, same trips):
+
+| | calm | 4 m/s breeze + 1.5 m/s gusts |
+|---|---|---|
 | success | 1000 of 1000 (100%) | 999 of 1000 (99.9%) |
 | crashed | 0 | 1 (seed 962) |
-| out of time / ended over 1 m away | 0 / 0 | 0 / 0 |
 | tracking error, rms per flight (median, p95, worst) | 0.109, 0.159, 0.472 m | 0.145, 0.194, 0.610 m |
 | estimation error, rms per flight (median, p95, worst) | 0.013, 0.015, 0.022 m | 0.013, 0.015, 0.020 m |
 | off the goal at the end (median, p95, worst) | 0.081, 0.117, 0.292 m | 0.097, 0.188, 0.339 m |
@@ -32,7 +45,9 @@ Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`. The headline ru
 | replan time, a* + smooth (median, p95, worst) | 1.26, 4.70, 4.70 ms | 1.51, 14.11, 21.94 ms |
 | a replan found no path | 8 | 6 |
 
-The windy column leaves out the crash (999 flights).
+The windy column there leaves out the crash (999 flights).
+
+The change made the median and p95 a little better everywhere and the windy worst case better (0.610 to 0.469 m). The calm worst case got worse (0.472 to 0.658 m). That's the same kind of flight as seed 127 in `results/planning.md`: in a hard turn there's no thrust level where all the roll and pitch fits, so the mixer gives up some thrust, the drone sinks a little, and the outer loop spends a moment climbing back with no thrust left for sideways force.
 
 Planning, the same trips for both winds:
 
@@ -44,15 +59,19 @@ Planning, the same trips for both winds:
 
 A path was found for all 1000 trips. The planning times are wall clock on a laptop, so they move a little between runs: a first run of the same trips (before the fixes below) had 10.91, 48.99 and 140.13 ms. The paths themselves came out the same.
 
-## The crash
+## The crash (fixed 2026-11-05)
 
 Seed 962 in the wind. It crashed in both runs, with two different gust streams, so it isn't one unlucky gust. The path ends with a 1 m leg flown east, with the breeze behind it, to a goal (-2.25, -27.75, 2.25) right next to a building. A 1 m leg at 3 m/s² tops out at 1.7 m/s, but a gust (the air reached 5.5 m/s) pushed the drone to 2.3 m/s. Braking against the breeze then tilted it up to 53°. Hovering takes 660 of the motors' 838 rad/s, so with thrust going as speed squared they have 1.61 times hover thrust, which runs out of lift past about 52° of tilt (worked out from the parameters in `core/quad.h`, not measured). It sank 0.6 m, swung around the goal at up to 1.4 m/s, and its reach touched the building 0.91 m from the goal at 13.3 s, about a second after the setpoint had arrived. The estimate was within a centimeter of the real drone the whole time, and the same trip in calm air succeeded.
 
-So the limit here is thrust margin next to a wall, not the planner or the estimate. The planner keeps the center 0.79 m from buildings and the drone reaches 0.356 m, which leaves 0.43 m of slack, and this swing used more than that. Slowing the ramps in wind, a bigger margin when it's windy, or a tilt limit that gives up position before altitude would each help. I haven't changed any of them, since that would change every flight number before it.
+I first read that as running out of thrust margin. Tracing it showed something else. The controller never asked for more than 34° of tilt. The drone went to 53° on its own while the command was 25° and falling, and one rotor sat at full speed the whole time. The attitude loop wanted about 2.4 N m of torque to stop the tip, but the mixer kept the total thrust exact first and only fit roll and pitch on top, so it handed out 17 to 21% of what was asked. There was no headroom left on the rotor that needed to speed up.
+
+The fix is in `mix()` in `core/controller.cpp`: roll and pitch now come before thrust. If moving the total thrust up or down makes all of the roll and pitch fit, it moves just that far. If no thrust level fits it all, it goes to the middle of the range, where opposite rotors have the same room and the most of it fits. Yaw still gives way first. Two new tests in `tests/test_controller.cpp` cover both ends (near full thrust and near zero), and the old "roll too big" test now checks that a rotor ends up at both limits, meaning no other thrust level would have fit more. Seed 962 now peaks at 35.5° against a command of 34.4° and ends 0.38 m from the goal.
+
+I also tried only moving thrust when that makes everything fit, and keeping it otherwise. That also stopped the crash, but seed 962 still tipped to 50°, and its 1000 trip run had a windy worst case of 0.724 m. The middle of the range fixes the tipping itself, so I kept that.
 
 ## The replans that found no path
 
-8 calm and 6 windy flights had a replan that couldn't find a way and held where it was. All 14 were on the final approach or already there: 0.03 to 0.26 m from the goal and at most 0.47 s before the setpoint reached the end, so every one still ended within 1 m and counts as a success (the tool prints each one). Those goals sit next to a building, and a lidar hit late in the flight blocks the goal's cell, so there's nowhere left to plan to. In the page that means a goal tapped right next to a wall can turn into "can't find a way" once the lidar looks at that wall.
+4 calm and 7 windy flights had a replan that couldn't find a way and held where it was (8 and 6 before the mixer change). All 11 were on the final approach or already there: 0.06 to 0.25 m from the goal and at most 0.47 s before the setpoint reached the end, so every one still ended within 1 m and counts as a success (the tool prints each one). Those goals sit next to a building, and a lidar hit late in the flight blocks the goal's cell, so there's nowhere left to plan to. In the page, a goal tapped right next to a wall used to turn into "the lidar found the way blocked" once the lidar looked at that wall. Since 2026-11-05 the page counts a failed replan within 1 m of the goal as arrived, the same 1 m rule as here.
 
 ## Fixes after a review pass
 

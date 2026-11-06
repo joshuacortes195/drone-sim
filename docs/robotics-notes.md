@@ -137,7 +137,13 @@ The rotors have limits: 838 rad/s at the top and zero at the bottom. My airframe
 
 First, the outer loop limits what it asks for. The tilt is capped at 35 degrees, which is well under the 51.6 degrees where full throttle only just holds altitude. Total thrust stays between 20% and 90% of full, so there's always some room left to steer. The vertical part of the force gets priority, and the sideways part gets whatever the tilt limit and the leftover thrust allow.
 
-Second, the mixer has a priority order. When the rotors can't do everything, it keeps total thrust first, then as much roll and pitch as fits, then yaw. Yaw goes first because it's the weakest axis (0.016 m of moment against arms of 0.13 to 0.22 m) and losing it for a moment doesn't drop the drone.
+Second, the mixer has a priority order. When the rotors can't do everything, roll and pitch come first, then total thrust, then yaw. Yaw goes first because it's the weakest axis (0.016 m of moment against arms of 0.13 to 0.22 m) and losing it for a moment doesn't drop the drone.
+
+Roll and pitch didn't always come before thrust. At first the mixer kept total thrust exact and fit as much roll and pitch on top as it could. That crashed one flight out of 1000 in the batch eval (seed 962 in the wind). Braking hard near full thrust, one rotor was already at its limit, so the mixer could only give the attitude loop about a fifth of the torque it asked for. The command was 25° of tilt and dropping, and the drone kept tipping to 53°, past where the motors can hold it up, then sank into a wall. The tilt limit can't catch that, because it only limits what the outer loop asks for, not what the drone actually does.
+
+The fix: roll and pitch push opposite rotors in opposite directions and add up to no thrust, so I can slide all four rotors up or down together to make room. The mixer works out the range of total thrust where all the roll and pitch fit between off and full. If the thrust it wants is outside that range, it moves to the nearest edge. If the range is empty, it goes to the middle, where both ends have the same room and the most roll and pitch fits. I'd rather lose a little height for a moment than let the drone tip past 52°, where it can't hold itself up at all. The cost is that in a very hard turn it gives up some thrust for a moment and sinks a little, which made the worst of 200 planned flights track 0.91 m off instead of 0.43 m. The typical flight got a bit better.
+
+I found it with a scratch copy of the eval that flew just that one trip in half a second and printed the commanded tilt next to the real one. That showed the command never went past 34°, which ruled out the thrust margin story I'd written up first. Logging the share of the torque the mixer handed out (17 to 21%) pointed straight at it.
 
 Third, anti windup. When the controller asks for more than the drone can give, the integral keeps adding up error it can't fix. When the drone finally gets there, all that stored integral shoves it past the target. I cap both integrals: 2 m/s² for velocity and 1 rad/s² for rate. I picked the rate cap from the physics. Rotor drag at 5 m/s makes about 0.53 rad/s² of pitch, so 1 covers it with room to spare.
 
@@ -154,6 +160,8 @@ Interview questions:
 - When the motors saturate, which axis do you give up first, and why?
 - Why limit the tilt angle, and how did you pick 35 degrees?
 - Why did your yaw overshoot even with reasonable gains?
+- Your tilt limit was 35 degrees but the drone reached 53. How?
+- Should a mixer give up thrust or attitude first when it saturates, and what does each cost?
 
 ## Attitude error from quaternions
 

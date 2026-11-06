@@ -30,18 +30,20 @@ Per sample noise is density × √(1000 Hz). GPS noise is fresh on every fix. Re
 
 ## Flying the 200 planned paths
 
+Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"). The flight numbers are deterministic and matched the PC exactly before the change. The old row values are in brackets where they moved.
+
 | | on the true state | on the estimate, NEO-M8N | on the estimate, ZED-F9P RTK |
 |---|---|---|---|
-| flights within the drone's 0.356 m reach of a building or the ground | 0 | 51 | 0 |
+| flights within the drone's 0.356 m reach of a building or the ground | 0 | 53 (51) | 0 |
 | flights whose center went inside a building or the ground | 0 | 1 | 0 |
-| closest any flight got | 0.680 m | -1.207 m | 0.679 m |
-| worst to setpoint, median / p95 / worst | 0.283 / 0.401 / 0.430 m | 2.319 / 3.935 / 5.594 m | 0.283 / 0.416 / 0.466 m |
-| off the goal 3 s after the path ends, median / p95 / worst | 0.086 / 0.100 / 0.112 m | 1.047 / 2.107 / 3.136 m | 0.083 / 0.118 / 0.138 m |
-| estimate RMS error, median / p95 / worst | | 1.076 / 1.607 / 2.152 m | 0.011 / 0.013 / 0.015 m |
-| estimate worst error, median / p95 / worst | | 2.267 / 3.372 / 4.371 m | 0.036 / 0.047 / 0.063 m |
+| closest any flight got | 0.673 m (0.680) | -1.210 m (-1.207) | 0.674 m (0.679) |
+| worst to setpoint, median / p95 / worst | 0.255 / 0.384 / 0.914 m (0.283 / 0.401 / 0.430) | 2.444 / 4.094 / 5.799 m (2.319 / 3.935 / 5.594) | 0.257 / 0.399 / 0.893 m (0.283 / 0.416 / 0.466) |
+| off the goal 3 s after the path ends, median / p95 / worst | 0.082 / 0.096 / 0.221 m (0.086 / 0.100 / 0.112) | 1.056 / 2.125 / 3.164 m (1.047 / 2.107 / 3.136) | 0.080 / 0.115 / 0.215 m (0.083 / 0.118 / 0.138) |
+| estimate RMS error, median / p95 / worst | | 1.073 / 1.606 / 2.152 m (1.076 / 1.607 / 2.152) | 0.011 / 0.013 / 0.015 m |
+| estimate worst error, median / p95 / worst | | 2.266 / 3.372 / 4.371 m (2.267 / 3.372 / 4.371) | 0.036 / 0.047 / 0.064 m (0.036 / 0.047 / 0.063) |
 | raw GPS RMS error (3D), median / p95 / worst | | 5.146 / 5.533 / 5.835 m | 0.021 / 0.022 / 0.023 m |
 
-The Kalman filter cuts the position error about 5x with the NEO-M8N (1.08 m vs 5.15 m RMS at the median) and about 2x with RTK (0.011 m vs 0.021 m). The planner keeps paths 0.789 m from buildings, a margin set assuming the drone knows exactly where it is, and the streets are 4 m wide. With the NEO-M8N the drone is often 1 to 2 m wrong about its own position, so a quarter of the flights clip a building. With RTK the flights are as safe as flying on the truth. So I'm using RTK from here on (`rtk()`), and the NEO-M8N stays as the comparison. In the code `Noise{}` is still the NEO-M8N setup, and the page will use RTK when it starts flying on the estimate in phase 5b.
+The Kalman filter cuts the position error about 5x with the NEO-M8N (1.07 m vs 5.15 m RMS at the median) and about 2x with RTK (0.011 m vs 0.021 m). The planner keeps paths 0.789 m from buildings, a margin set assuming the drone knows exactly where it is, and the streets are 4 m wide. With the NEO-M8N the drone is often 1 to 2 m wrong about its own position, so a quarter of the flights clip a building. With RTK the flights are as safe as flying on the truth. So I'm using RTK from here on (`rtk()`), and the NEO-M8N stays as the comparison. In the code `Noise{}` is still the NEO-M8N setup, and the page will use RTK when it starts flying on the estimate in phase 5b.
 
 A* times move between runs of this tool (18.0 and 16.0 ms medians on two runs this session, 15.5 ms in `results/planning.md`). I haven't looked into the spread, so the planning times stay as recorded there.
 

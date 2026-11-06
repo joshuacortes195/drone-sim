@@ -1,6 +1,6 @@
 # Control results (phase 2)
 
-Measured 2026-10-15 with `tools/fly_route.cpp` unless a section says otherwise. Everything except the two modified-copy windup numbers is printed by that tool.
+Measured 2026-10-15 with `tools/fly_route.cpp` unless a section says otherwise. Everything except the two modified-copy windup numbers is printed by that tool. Rerun 2026-11-05 on the same Mac after the mixer change (see "Mixer change" at the end): the step, route and recovery tables show the new numbers, the feed forward and tuning sections are from before it.
 
 ## How
 
@@ -34,7 +34,7 @@ Limits: velocity integral capped at 2 m/s² per axis, rate integral at 1 rad/s²
 
 | step | overshoot | settle (2%) | error at 10 s | altitude dip | test limit |
 |---|---|---|---|---|---|
-| x 1 m | 1.1% | 1.85 s | 1.7 mm | 14.0 mm | < 10%, < 4 s |
+| x 1 m | 0.9% | 1.86 s | 1.6 mm | 4.5 mm | < 10%, < 4 s |
 | y 1 m | 1.0% | 1.86 s | 1.7 mm | 8.3 mm | < 10%, < 4 s |
 | z 1 m | 1.6% | 1.41 s | 1.0 mm | | < 10%, < 3 s |
 | yaw 1 rad | 2.2% | 2.00 s | 0.0009 rad | 8.0 mm | < 10%, < 4 s |
@@ -47,10 +47,10 @@ A fixed route of 5 waypoints, 81.2 m long: (0, 0, 10) → (20, 0, 10) → (20, 2
 
 | reference | cruise speed | time | RMS to reference | max to reference | RMS cross track |
 |---|---|---|---|---|---|
-| 3 m/s² ramps, stops at each waypoint | 2 m/s | 43.3 s | 0.061 m | 0.209 m | 0.038 m |
-| 3 m/s² ramps, stops at each waypoint | 5 m/s | 22.9 s | 0.119 m | 0.219 m | 0.062 m |
-| constant speed, instant 90° corners | 2 m/s | 40.6 s | 0.298 m | 1.147 m | 0.202 m |
-| constant speed, instant 90° corners | 5 m/s | 16.2 s | 2.904 m | 5.506 m | 1.892 m |
+| 3 m/s² ramps, stops at each waypoint | 2 m/s | 43.3 s | 0.057 m | 0.194 m | 0.035 m |
+| 3 m/s² ramps, stops at each waypoint | 5 m/s | 22.9 s | 0.114 m | 0.205 m | 0.058 m |
+| constant speed, instant 90° corners | 2 m/s | 40.6 s | 0.289 m | 1.138 m | 0.195 m |
+| constant speed, instant 90° corners | 5 m/s | 16.2 s | 2.901 m | 5.523 m | 1.900 m |
 
 The sharp corner rows are a reference the drone physically can't follow. Turning 90° at 5 m/s is a 7.1 m/s change in velocity, the 35° tilt limit gives at most 6.9 m/s² sideways, so it spends over a second pinned at the tilt limit while the error grows to about 5 m. Those rows show what the planner's path smoothing (phase 4) needs to avoid, not how well the controller tracks.
 
@@ -71,15 +71,15 @@ Hovering at 10 m with the set point right there, but tipped about x by the angle
 
 | start tilt | worst distance from set point | height lost | back under 5° tilt | off at 6 s | off at 10 s |
 |---|---|---|---|---|---|
-| 30° | 0.222 m | 0.039 m | 0.18 s | 1.71 cm | 0.44 cm |
-| 120° | 4.100 m | 2.822 m | 0.61 s | 11.2 cm | 3.7 cm |
-| 180° (upside down) | 9.892 m | 8.970 m | 0.87 s | 1.106 m | 2.3 cm |
+| 30° | 0.219 m | 0.040 m | 0.18 s | 1.68 cm | 0.43 cm |
+| 120° | 4.082 m | 2.464 m | 0.58 s | 10.9 cm | 3.7 cm |
+| 180° (upside down) | 9.483 m | 8.438 m | 0.84 s | 0.498 m | 2.7 cm |
 
-The slow last few centimeters come from the velocity integral, which charged up during the first lurch and bleeds off with a time constant of kv / ki = 2.5 s. From upside down it loses almost 9 m: the thrust never goes below its 20% floor, and while the drone is still inverted that floor pushes it down. The floor has to be there anyway, because with zero thrust the mixer has nothing to steer with. Before I added it, a drone started upside down never turned over and fell 481 m in 10 s.
+The slow last few centimeters come from the velocity integral, which charged up during the first lurch and bleeds off with a time constant of kv / ki = 2.5 s. From upside down it loses about 8.4 m: the thrust never goes below its 20% floor, and while the drone is still inverted that floor pushes it down. The floor has to be there anyway, because with zero thrust the mixer has nothing to steer with. Before I added it, a drone started upside down never turned over and fell 481 m in 10 s.
 
 ## 10 m step in x
 
-A plain set point jump with no path, so the speed cap, the tilt limit and the integral all come into play: 9.937 m at 3 s, 9.801 m at 5 s (it brakes a little early and creeps back in), 9.9955 m at 15 s, and no overshoot past 10 m.
+A plain set point jump with no path, so the speed cap, the tilt limit and the integral all come into play: 9.940 m at 3 s, 9.803 m at 5 s (it brakes a little early and creeps back in), 9.9956 m at 15 s, and no overshoot past 10 m.
 
 ## Windup
 
@@ -98,3 +98,18 @@ What changed while tuning, all measured with the same step scoring:
 - tried conditional integration (stop adding to the velocity integral while the tilt or thrust limit clips the output). On the 10 m move (speed cap still 5 m/s then) it was at 9.54 m after 3 s, against 9.90 m without it, because it also stopped the integral learning the rotor drag push it needs at cruise speed. Removed it. The caps do the anti windup work
 - rate integral cap 5 → 1 rad/s²: rotor drag at 5 m/s makes about 0.53 rad/s² of pitch (4 rotors × 8.06e-5 × 660 rad/s × 5 m/s ≈ 1.06 N, acting 0.023 m above the center, over Iyy 0.0459), and the rolling moment adds about 0.38 rad/s² of roll (4 × 1e-6 × 660 × 5 = 0.0132 N m over Ixx 0.0348). Both fit under 1, which winds up far less
 - horizontal speed cap 5 → 8 m/s: with a 5 m/s path and a 5 m/s cap, the velocity set point had no room to catch up once it fell behind
+
+## Mixer change (2026-11-05)
+
+The mixer used to keep total thrust exact and shrink roll and pitch to whatever fit on top. Now roll and pitch come first: thrust moves up or down just far enough to fit all of them, and when no thrust level fits them all it goes to the middle of the range, where the most fits (`mix()` in `core/controller.cpp`). That fixed the one crash in the batch eval (`results/eval.md`). Before and after, same Mac, same tool, back to back:
+
+| | before | after |
+|---|---|---|
+| x step overshoot / settle / altitude dip | 1.1% / 1.85 s / 14.0 mm | 0.9% / 1.86 s / 4.5 mm |
+| ramped route at 5 m/s, RMS / max to reference | 0.119 / 0.219 m | 0.114 / 0.205 m |
+| ramped route at 2 m/s, RMS / max to reference | 0.061 / 0.209 m | 0.057 / 0.194 m |
+| 120° start, height lost / back under 5° | 2.822 m / 0.61 s | 2.464 m / 0.58 s |
+| 180° start, height lost / back under 5° / off at 6 s | 8.970 m / 0.87 s / 1.106 m | 8.438 m / 0.84 s / 0.498 m |
+| one `control()` call | 717 ns | 718 ns |
+
+The y, z and yaw steps didn't change. The `control()` times were taken with the batch eval running on the other cores, so they're only good for the comparison: the extra solve in the mixer doesn't show. The 268 to 300 ns above is from an idle machine before the change.

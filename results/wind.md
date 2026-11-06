@@ -1,6 +1,6 @@
 # Wind results (phase 6a)
 
-Measured 2026-10-21 on my PC with `tools/wind_report.cpp`.
+Measured 2026-10-21 on my PC with `tools/wind_report.cpp`. Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"): only the nine everyday GPS rows moved, in the third or fourth digit, and the truth and RTK rows came out the same as the PC's to the last digit. The table of the accelerometer fix further down keeps the numbers from the time.
 
 ## How
 
@@ -36,15 +36,15 @@ Measured 2026-10-21 on my PC with `tools/wind_report.cpp`.
 | rtk | 8 | 0.0 | 0.0196 / 0.0263 | 0.0379 / 0.0506 | 6.50 | 7.20 | 0.0106 | 9.97 |
 | rtk | 8 | 1.5 | 0.0751 / 0.0945 | 0.1736 / 0.2118 | 6.72 | 11.68 | 0.0106 | 9.96 |
 | rtk | 8 | 3.0 | 0.1466 / 0.1836 | 0.3463 / 0.4040 | 7.28 | 17.10 | 0.0109 | 9.94 |
-| everyday gps | 0 | 0.0 | 1.2395 / 1.6963 | 2.2264 / 2.8522 | 3.71 | 14.58 | 1.0683 | 7.62 |
-| everyday gps | 0 | 1.5 | 1.2438 / 1.6786 | 2.2508 / 2.8226 | 4.12 | 18.09 | 1.0704 | 7.65 |
-| everyday gps | 0 | 3.0 | 1.2568 / 1.6734 | 2.2919 / 2.8329 | 5.14 | 23.13 | 1.0689 | 7.69 |
-| everyday gps | 4 | 0.0 | 1.2512 / 1.7088 | 2.2278 / 2.8924 | 4.73 | 18.11 | 1.0599 | 7.64 |
-| everyday gps | 4 | 1.5 | 1.2512 / 1.6878 | 2.2463 / 2.8577 | 5.06 | 16.55 | 1.0612 | 7.68 |
-| everyday gps | 4 | 3.0 | 1.2508 / 1.6804 | 2.2848 / 2.8357 | 5.94 | 19.59 | 1.0644 | 7.72 |
-| everyday gps | 8 | 0.0 | 1.2575 / 1.7238 | 2.2289 / 2.9341 | 7.26 | 21.72 | 1.0518 | 7.66 |
-| everyday gps | 8 | 1.5 | 1.2603 / 1.7005 | 2.2447 / 2.8994 | 7.46 | 20.32 | 1.0521 | 7.71 |
-| everyday gps | 8 | 3.0 | 1.2575 / 1.6943 | 2.2732 / 2.8696 | 8.03 | 22.92 | 1.0541 | 7.75 |
+| everyday gps | 0 | 0.0 | 1.2376 / 1.7016 | 2.2296 / 2.8527 | 3.71 | 14.58 | 1.0685 | 7.62 |
+| everyday gps | 0 | 1.5 | 1.2443 / 1.6847 | 2.2402 / 2.8303 | 4.12 | 18.08 | 1.0707 | 7.66 |
+| everyday gps | 0 | 3.0 | 1.2573 / 1.6786 | 2.2859 / 2.8409 | 5.14 | 23.13 | 1.0697 | 7.70 |
+| everyday gps | 4 | 0.0 | 1.2494 / 1.7126 | 2.2305 / 2.8955 | 4.73 | 18.11 | 1.0600 | 7.64 |
+| everyday gps | 4 | 1.5 | 1.2459 / 1.6938 | 2.2418 / 2.8582 | 5.06 | 16.55 | 1.0615 | 7.68 |
+| everyday gps | 4 | 3.0 | 1.2439 / 1.6901 | 2.2774 / 2.8441 | 5.94 | 19.60 | 1.0648 | 7.73 |
+| everyday gps | 8 | 0.0 | 1.2496 / 1.7265 | 2.2334 / 2.9429 | 7.26 | 21.72 | 1.0525 | 7.66 |
+| everyday gps | 8 | 1.5 | 1.2562 / 1.7022 | 2.2439 / 2.9036 | 7.46 | 20.33 | 1.0528 | 7.71 |
+| everyday gps | 8 | 3.0 | 1.2490 / 1.7013 | 2.2663 / 2.8713 | 8.03 | 22.93 | 1.0549 | 7.76 |
 
 What I read from it:
 
