@@ -57,6 +57,11 @@ static Wind wnd = make_wind({}, 0, 2);
 static double wind_buf[3];
 static bool crash = false, truth = false;
 
+// landing: coming down onto the pad, sitting on it with the motors off, and whether touching the ground is allowed
+// (from the start of a landing until it has climbed back off the pad). the path's speed and ramps, slower for landing
+static bool landing = false, landed = false, ground_ok = false;
+static double speed = CRUISE, ramp = ACCEL;
+
 // the state everything flies on: the estimate, or the real state in truth mode
 static const QuadState& nav() { return truth ? s : e; }
 
@@ -90,7 +95,9 @@ static void lidar_turn() {
   }
   size_t known = grown.size();
   const QuadState& n = nav();
-  if (add_hits(grid, grown, hits, boxes, n.p) && following && replan(path, grid, grown, known, n.p, goal)) {
+  // no replans on the way down, the pad is under the planner's floor so every one would fail
+  if (add_hits(grid, grown, hits, boxes, n.p) && following && !landing &&
+      replan(path, grid, grown, known, n.p, goal)) {
     // no way through, or a path too long to draw: hold where it thinks it is.
     // the hold is one point, so nothing can cut it and it won't replan again on its own
     publish_path();
@@ -143,12 +150,13 @@ EMSCRIPTEN_KEEPALIVE void reset(double x, double y, double z, double yaw) {
   pack(e, est_prev_buf);
   tick = 0;
   hit_count = 0;
-  crash = false;
+  crash = landing = landed = ground_ok = false;
+  speed = CRUISE, ramp = ACCEL;
 }
 
 // tells the controller where to fly and which way to face, it holds there once it arrives
 EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
-  following = false;
+  following = landing = landed = false;
   sp = Setpoint{};
   sp.pos = {x, y, z};
   sp.yaw = yaw;
@@ -157,7 +165,8 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
 // runs the controller and physics forward some 1 ms steps. the page calls it one step at a time so it can check
 // the mission after each step, a big batch is only used to time the pure wasm cost
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
-  for (int i = 0; i < steps && !crash; i++) {
+  // a landed drone sits still with the motors off until it's sent somewhere
+  for (int i = 0; i < steps && !crash && !landed; i++) {
     tick++;
     // the wind this step, the imu feels its drag and the physics moves the drone through it
     Vec3 air = wind_step(wnd, DT);
@@ -176,14 +185,25 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
     if (following && replans == before) path_t += DT;
 
     // when flying a path, the setpoint slides along it
-    if (following) sp = follow(path, path_t, CRUISE, ACCEL, path_yaw);
+    if (following) sp = follow(path, path_t, speed, ramp, path_yaw);
 
     // the controller flies on the estimate (or the truth), the physics moves the real drone through the wind
     prev = s;
     s = step(P, s, control(c, P, nav(), sp, DT), DT, air);
     wind_buf[0] = air.x, wind_buf[1] = air.y, wind_buf[2] = air.z;
-    // touching a box or the ground ends the run
-    if (crashed(s.p, world)) crash = true;
+    // touching a box or the ground ends the run, except the ground while landing or taking off from the pad
+    Vec3 hit = s.p;
+    if (ground_ok) hit.z = std::max(hit.z, kReach);
+    if (crashed(hit, world)) crash = true;
+    // skids on the pad: motors off and it stays put. once it has climbed clear, the ground counts again
+    if (landing && s.p.z < kSkid + 0.01 && std::abs(s.v.z) < 0.3) {
+      landing = false;
+      landed = true;
+      s.p.z = kSkid;
+      s.v = s.w = Vec3{};
+      s.rotor = {0, 0, 0, 0};
+    }
+    if (!landing && !landed && s.p.z > kReach + 0.2) ground_ok = false;
   }
   pack(s, now_buf);
   pack(prev, prev_buf);
@@ -256,6 +276,9 @@ EMSCRIPTEN_KEEPALIVE int is_crashed() { return crash; }
 // plans a smoothed path from where the drone thinks it is to the goal and starts flying it.
 // returns how many waypoints it has, 0 when there's no way there (the drone then just holds)
 EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
+  // flying off the pad after a landing, at the normal path speed again
+  landing = landed = false;
+  speed = CRUISE, ramp = ACCEL;
   goal = {x, y, z};
   path = smooth(astar(grid, nav().p, goal), grown);
   publish_path();
@@ -298,7 +321,22 @@ EMSCRIPTEN_KEEPALIVE double* hits_ptr() { return hit_buf; }
 EMSCRIPTEN_KEEPALIVE int hits_len() { return hit_count; }
 
 // true once the setpoint has reached the end of the path
-EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, CRUISE, ACCEL); }
+EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, speed, ramp); }
+
+// comes straight down from where it thinks it is onto the ground below, slowly, and turns the motors off on touchdown
+EMSCRIPTEN_KEEPALIVE void land() {
+  const QuadState& n = nav();
+  goal = {n.p.x, n.p.y, kSkid};
+  path = {n.p, goal};
+  publish_path();
+  path_yaw = heading(n.q);
+  path_t = 0;
+  following = landing = ground_ok = true;
+  speed = ramp = kLandSpeed;
+}
+
+// true once it's sitting on the ground with the motors off
+EMSCRIPTEN_KEEPALIVE int is_landed() { return landed; }
 
 // the physics step in seconds, so the page's clock uses the same one
 EMSCRIPTEN_KEEPALIVE double step_size() { return DT; }

@@ -45,9 +45,10 @@ const FLYING: Record<Mission, string> = {
   goal: 'flying to your goal',
 };
 const DONE: Record<Mission, string> = {
+  // the route loops, so it's never done. same text in case that changes
   route: 'flying the waypoint route',
   search: 'search done, holding over home',
-  home: 'holding over home',
+  home: 'landed on the home pad',
   goal: 'holding at your goal',
 };
 

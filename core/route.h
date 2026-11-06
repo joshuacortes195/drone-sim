@@ -23,3 +23,7 @@ Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double a
 // a lawnmower search over the box x0..x1, y0..y1 at height z: rows running east west, the first on y0 and the last on
 // y1, spread evenly with no gap wider than spacing, each row flown the opposite way from the one before
 std::vector<Vec3> lawnmower(double x0, double y0, double x1, double y1, double z, double spacing);
+
+// landing: where the drone's center sits once its skids touch the ground (they hang 0.115 m under it, see the model in
+// web/src/scene.ts), and how fast the last leg comes down onto the pad, ramping in and out at the same rate
+constexpr double kSkid = 0.115, kLandSpeed = 0.5;

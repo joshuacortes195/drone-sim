@@ -297,6 +297,8 @@ export function buildGhost(sim: Drone) {
   });
   // a bit bigger so it shows around the real drone when the two sit on top of each other
   ghost.scale.setScalar(1.15);
+  // its props never spin, so it doesn't need the prop list buildDrone keeps for spinProps
+  ghost.userData = {};
   return ghost;
 }
 

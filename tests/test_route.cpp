@@ -114,3 +114,29 @@ TEST_CASE("lawnmower: rounding in the division doesn't add a row") {
   std::vector<Vec3> got = lawnmower(0, 0, 1, 2.1, 2, 0.3);
   CHECK(got.size() == 16);
 }
+
+// go home ends by coming straight down onto the pad. flown with the real controller and physics from a 2 m hover:
+// it never sinks below where the skids touch, gets there gently and doesn't drift or tip on the way down
+TEST_CASE("landing: from a 2 m hover it comes straight down to skid height, slow, level and on the spot") {
+  QuadParams P;
+  Controller c;
+  QuadState s;
+  s.p = {3, -4, 2};
+  double w = std::sqrt(P.mass * 9.81 / (4 * P.k_f));
+  s.rotor = {w, w, w, w};
+  std::vector<Vec3> down = {s.p, {3, -4, kSkid}};
+  double T = path_time(down, kLandSpeed, kLandSpeed);
+  double lowest = 10, fastest = 0, drift = 0, tilt = 0;
+  for (int i = 1; i <= int((T + 2) / 0.001); i++) {
+    s = step(P, s, control(c, P, s, follow(down, i * 0.001, kLandSpeed, kLandSpeed), 0.001), 0.001);
+    lowest = std::min(lowest, s.p.z);
+    fastest = std::max(fastest, std::abs(s.v.z));
+    drift = std::max(drift, std::hypot(s.p.x - 3, s.p.y + 4));
+    tilt = std::max(tilt, std::acos(std::clamp(rotate(s.q, {0, 0, 1}).z, -1.0, 1.0)));
+  }
+  CHECK(lowest > kSkid - 0.01);
+  CHECK(std::abs(s.p.z - kSkid) < 0.01);
+  CHECK(fastest < kLandSpeed * 1.1);
+  CHECK(drift < 0.01);
+  CHECK(tilt < 0.01);
+}

@@ -144,6 +144,8 @@ let mission: Mission = 'route';
 let goals = GOALS;
 let loop = true;
 let finished = false;
+// go home ends with a landing on the pad, this is true while it comes down
+let landing = false;
 // the goal it's flying to right now, so a tap it can't reach can put it back on course
 let goal = GOALS[0];
 
@@ -159,6 +161,16 @@ function goTo(i: number) {
   for (let tries = 0; tries < goals.length; tries++, i++) {
     // past the last goal: a loop starts over, anything else is done and holds where it is
     if (i >= goals.length) {
+      // go home ends by coming straight down onto the pad, it's done once the skids touch
+      if (mission === 'home' && !landing) {
+        landing = true;
+        sim._land();
+        drawPath();
+        // the goal marker would sit on the pad right under the drone, so it's hidden until the next goal
+        target.visible = false;
+        setReadout({ note: 'landing on the home pad' });
+        return;
+      }
       if (!loop) {
         finished = true;
         setReadout({ done: true });
@@ -177,6 +189,7 @@ function goTo(i: number) {
     }
     drawPath();
     target.position.set(x, y, z);
+    target.visible = true;
     goal = goals[i];
     leg = i;
     return;
@@ -228,11 +241,23 @@ function updateMission() {
     oldPathUntil = sim._sim_tick() + 2000;
     drawPath();
     // a failed replan leaves a hold, one point where the drone is. a mission that doesn't loop holds there and says so,
-    // instead of counting it as reached and claiming it's done
-    if (!loop && sim._path_len() <= 1) {
+    // instead of counting it as reached and claiming it's done. right next to the goal it counts as there: that's a
+    // goal by a wall the lidar just saw, its cell is now too close to the wall to plan into (results/eval.md)
+    const dx = now[0] - goal[0], dy = now[1] - goal[1], dz = now[2] - goal[2];
+    const there = dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M;
+    if (!loop && sim._path_len() <= 1 && !there) {
       stuck = true;
       setReadout({ note: 'the lidar found the way blocked, holding here' });
     }
+  }
+  // the landing is over when the core says the skids are down and the motors are off
+  if (landing) {
+    if (sim._is_landed()) {
+      landing = false;
+      finished = true;
+      setReadout({ done: true, note: '' });
+    }
+    return;
   }
   // on the looping route that one point hold counts as done right away, so it moves on to the next goal.
   // natively (lidar_report) the drone just stays holding
@@ -347,12 +372,13 @@ function sendTo(x: number, y: number, z: number) {
   goal = [x, y, z];
   goals = [goal];
   mission = 'goal';
-  loop = finished = stuck = false;
+  loop = finished = stuck = landing = false;
   leg = 0;
   // the tour's hidden cube would drop in on a path nobody is flying any more
   cube = null;
   drawPath();
   target.position.set(x, y, z);
+  target.visible = true;
   setReadout({ mission, done: false, note: '' });
 }
 
@@ -365,12 +391,19 @@ function searchGoals() {
   return [...rows, HOME];
 }
 
+// go home: climbs straight up to the search height first if it's lower, flies over the pad no higher than that,
+// comes down to 2 m and then lands
+function homeGoals(): [number, number, number][] {
+  const climb: [number, number, number][] = now[2] < SEARCH_Z ? [[now[0], now[1], SEARCH_Z]] : [];
+  return [...climb, [HOME[0], HOME[1], Math.max(HOME[2], Math.min(now[2], SEARCH_Z))], HOME];
+}
+
 // starts a preset from wherever the drone is: the waypoint route (loops), the lawnmower search or return to home
 function startMission(m: Mission) {
   mission = m;
-  goals = m === 'route' ? GOALS : m === 'search' ? searchGoals() : [HOME];
+  goals = m === 'route' ? GOALS : m === 'search' ? searchGoals() : homeGoals();
   loop = m === 'route';
-  finished = stuck = false;
+  finished = stuck = landing = false;
   // the tour's hidden cube only belongs to the first route after a reset
   cube = null;
   goTo(0);

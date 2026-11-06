@@ -454,17 +454,23 @@ Where it lives: `onTap`, `sendTo` and `dropBox` in `web/src/main.ts`, `add_box` 
 
 ## Missions: route, search and home
 
-A mission is just a list of goals. The drone plans to the first one with A*, flies it, and once it's within 1 m of the end it plans to the next. The waypoint route loops forever. The others stop at the last goal and hold there. If the lidar finds the way blocked and the replan fails, it holds where it is and the panel says it's blocked.
+A mission is just a list of goals. The drone plans to the first one with A*, flies it, and once it's within 1 m of the end it plans to the next. The waypoint route loops forever. The others stop at the last goal and hold there. If the lidar finds the way blocked and the replan fails, it holds where it is and the panel says it's blocked. The one exception is a failed replan less than 1 m from the goal. That's a goal right next to a wall: once the lidar sees the wall, the goal's own cell is too close to it to plan into. The drone is already there by the same 1 m rule the eval uses, so the page counts it as arrived instead of saying it can't find a way.
 
 The search is a lawnmower pattern, the way you'd search a field: fly a row, step over, fly back the other way. `lawnmower()` in `core/route.cpp` spreads the rows evenly between the two edges with no gap wider than the spacing I ask for. If the spacing doesn't fit evenly it adds a row so the last strip doesn't get skipped. The spacing should match how far the sensor sees on each side. For the city I sweep -29 to 29 m at 6 m up with 12 m spacing. That puts the six rows along the east west streets, so the lidar sweeps the buildings on both sides, and then it comes home.
 
 Dividing the depth by the spacing in floating point can come out a hair over a whole number (2.1 / 0.3 is 7.000000000000001), and rounding that up would add an extra row. A tiny tolerance before rounding stops that, and a test checks it.
 
-Return home plans from wherever the drone is to 2 m over the pad and holds. A real one would climb to a safe height first. A* already finds a way over or around the buildings, so I skipped that.
+Go home flies the same shape a real return to home does: climb, fly back, come down, land. If the drone is under 6 m it first climbs straight up to 6 m where it is. Then it flies over the pad, no higher than 6 m, drops to 2 m, and lands. A* would find a way home from anywhere without the climb. The climb is there because that's what an operator expects to see, and it gets the drone up off the street before it turns for home.
+
+The landing is the last leg. It's a straight path from where the drone thinks it is down to the height where its skids touch the ground (0.115 m under its center), flown by the same `follow()` as every other path but at 0.5 m/s with 0.5 m/s² ramps, so it slows down to touch. Two things had to change for it. The crash check counts anything within 0.356 m of the ground as a crash, so it skips the ground from the start of a landing until the drone has climbed back off the pad. And once the skids are down and it's coming down slower than 0.3 m/s, the motors turn off and the sim stops moving it until it's sent somewhere else. Sent somewhere else, it plans from the pad like any other start. The pad is under the planner's floor, so A* starts from the closest free cell, and the first leg is a climb up to it.
+
+It lands where it was holding, which is the center of a 0.5 m planning cell, so it touches down about 0.4 m from the middle of the pad. A test flies the landing with the real controller from a 2 m hover: it never goes below skid height, never comes down faster than 0.55 m/s, and doesn't drift or tip by more than a centimeter or 0.01 rad.
 
 Interview questions:
 - How do you pick the row spacing for a search pattern?
 - Why spread the rows evenly instead of stepping by exactly the spacing?
+- What does a return to home do, and why climb first when the planner could fly straight back?
+- How do you land without the collision check calling it a crash?
 
 ## Making it look like a real place
 

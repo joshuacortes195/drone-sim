@@ -26,6 +26,8 @@ export interface Drone {
   _set_noisy_gps(on: number): void;
   _set_truth(on: number): void;
   _is_crashed(): number;
+  _land(): void;
+  _is_landed(): number;
   _lawnmower_route(x0: number, y0: number, x1: number, y1: number, z: number, spacing: number): number;
   _route_ptr(): number;
 }
