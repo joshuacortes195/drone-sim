@@ -1,5 +1,6 @@
 #include "lidar.h"
 #include "planner.h"
+#include "route.h"
 
 #include <cmath>
 #include <limits>
@@ -53,14 +54,35 @@ bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, c
 }
 
 bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grown, size_t new_from, Vec3 from,
-            Vec3 goal) {
+            Vec3 goal, Vec3* vel) {
   // only the new boxes matter, the old ones were already planned around
   if (!path_blocked(path, std::vector<Box>(grown.begin() + long(new_from), grown.end()))) return false;
+  // moving: plan from where braking straight ahead ends, if that stays inside the flying area and the drone's reach
+  // never touches anything on the way (the grown boxes shrunk back to the reach)
+  Vec3 start = from;
+  bool braking = false;
+  if (vel && norm(*vel) > 0) {
+    Vec3 stop = from + *vel * (norm(*vel) / (2 * kBrake));
+    braking = g.inside(g.ix(stop.x), g.iy(stop.y), g.iz(stop.z)) && stop.z > kReach;
+    for (size_t i = 0; i < grown.size() && braking; i++) braking = !segment_hits(from, stop, grow(grown[i], kReach - kMargin));
+    if (braking) start = stop;
+  }
   // a fresh path on everything it knows now
-  path = astar(g, from, goal);
-  // start it right where the drone thinks it is instead of its cell center, so the setpoint doesn't jump.
-  // any point in a free cell is clear of the walls by the margin. a blocked start keeps the free cell it found
-  if (!path.empty() && !g.blocked(g.ix(from.x), g.iy(from.y), g.iz(from.z))) path[0] = from;
+  path = astar(g, start, goal);
+  // no way on from where it would stop: try from where it is, flown from rest like before
+  if (braking && path.empty()) {
+    braking = false;
+    start = from;
+    path = astar(g, start, goal);
+  }
+  // no braking leg, or nowhere to go: the caller flies it from rest
+  if (vel && (!braking || path.empty())) *vel = {};
+  // start it right where it'll be instead of its cell center, so the setpoint doesn't jump. any point in a free cell
+  // is clear of the walls by the margin. a blocked start keeps the free cell it found, after the braking leg if any
+  if (!path.empty()) {
+    if (!g.blocked(g.ix(start.x), g.iy(start.y), g.iz(start.z))) path[0] = start;
+    else if (braking) path.insert(path.begin(), start);
+  }
   path = smooth(path, grown);
   return true;
 }

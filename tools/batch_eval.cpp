@@ -94,6 +94,8 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
   const int limit_i = int(std::lround(TIME_LIMIT_S / DT));
   // steps actually flown, for the rms and the flight time
   int done = 0;
+  // how fast it was going at the last replan, the path brakes from it first
+  Vec3 v0;
   for (int i = 1; i <= end_i; i++) {
     if (i > limit_i) {
       f.timed_out = true;
@@ -115,7 +117,9 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
       size_t known = grown.size();
       bool added = add_hits(g, grown, scan(L, sn, s, e, boxes), boxes, e.p);
       auto t0 = std::chrono::steady_clock::now();
-      if (added && replan(path, g, grown, known, e.p, goal)) {
+      // the new path brakes from the speed it's going instead of stopping dead
+      Vec3 v = e.v;
+      if (added && replan(path, g, grown, known, e.p, goal, &v)) {
         f.replan_ms.push_back(ms_since(t0));
         f.replans++;
         if (path.empty()) {
@@ -127,12 +131,13 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
         }
         yaw = heading(e.q);
         start_i = i;
-        end_i = i + int(std::lround((path_time(path, CRUISE, ACCEL) + 3) / DT));
+        v0 = v;
+        end_i = i + int(std::lround((path_time(path, CRUISE, ACCEL, v0) + 3) / DT));
         t = 0;
       }
     }
 
-    Setpoint sp = follow(path, t, CRUISE, ACCEL, yaw);
+    Setpoint sp = follow(path, t, CRUISE, ACCEL, yaw, v0);
     s = step(P, s, control(c, P, e, sp, DT), DT, air);
     done++;
     // how far the real drone is from where it was told to be, and from where it thinks it is

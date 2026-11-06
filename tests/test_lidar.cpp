@@ -1,5 +1,6 @@
 #include "doctest.h"
 #include "lidar.h"
+#include "route.h"
 #include "planner.h"
 
 #include <algorithm>
@@ -313,4 +314,100 @@ TEST_CASE("add_hits: a new box about a meter off a known building, seen from clo
   // 1.1 to 1.4 m from the building. the tolerance at 4 m is 0.22 m, so all of it is new
   Box known{{5, 1, 0}, {7, 4, 10}}, fresh{{4, 0, 4.75}, {4.5, 0.5, 5.75}};
   CHECK(add_hits(g, grown, scan(Lidar{}, sn, s, s, {known, fresh}), {known}, s.p));
+}
+
+TEST_CASE("replan at speed: the new path starts where the drone stops braking, and following it starts at the drone") {
+  auto boxes = city(3);
+  Grid g = city_grid(boxes);
+  std::vector<Box> grown;
+  for (const Box& b : boxes) grown.push_back(grow(b, kMargin));
+  Vec3 start = g.center(g.ix(0.25), g.iy(0.25), g.iz(5.25));
+  Vec3 goal = g.center(g.ix(18.25), g.iy(18.25), g.iz(5.25));
+  auto path = smooth(astar(g, start, goal), grown);
+  REQUIRE(path.size() >= 2);
+  REQUIRE(norm(path[1] - path[0]) > 8);
+
+  // something new 6 m down the first leg, while the drone is flying it at 4 m/s
+  Vec3 u = (path[1] - path[0]) * (1 / norm(path[1] - path[0]));
+  Vec3 vel = u * 4;
+  size_t known = grown.size();
+  Box ahead = grow({start + u * 6 - Vec3{1, 1, 1}, start + u * 6 + Vec3{1, 1, 1}}, kMargin);
+  mark(g, ahead);
+  grown.push_back(ahead);
+
+  REQUIRE(replan(path, g, grown, known, start, goal, &vel));
+  // braking at kBrake from 4 m/s takes 1.6 m, the new path starts there and the velocity is kept for follow()
+  Vec3 stop = start + u * (16 / (2 * kBrake));
+  CHECK(norm(vel - u * 4) < 1e-12);
+  REQUIRE(path.size() >= 2);
+  CHECK(norm(path.front() - stop) < 1e-9);
+  CHECK(norm(path.back() - goal) < 1e-9);
+  CHECK(!path_blocked(path, {ahead}));
+  // the setpoint picks up right where the drone is, at its speed
+  Setpoint sp = follow(path, 0, 5, 3, 0, vel);
+  CHECK(norm(sp.pos - start) < 1e-9);
+  CHECK(norm(sp.vel - vel) < 1e-12);
+}
+
+TEST_CASE("replan at speed: when braking straight would run into the new box, it plans from where it is like before") {
+  auto boxes = city(3);
+  Grid g = city_grid(boxes);
+  std::vector<Box> grown;
+  for (const Box& b : boxes) grown.push_back(grow(b, kMargin));
+  Vec3 start = g.center(g.ix(0.25), g.iy(0.25), g.iz(5.25));
+  Vec3 goal = g.center(g.ix(18.25), g.iy(18.25), g.iz(5.25));
+  auto path = smooth(astar(g, start, goal), grown);
+  REQUIRE(path.size() >= 2);
+
+  // a small box 1.2 m ahead, inside the 1.6 m it would take to stop from 4 m/s
+  Vec3 u = (path[1] - path[0]) * (1 / norm(path[1] - path[0]));
+  Vec3 vel = u * 4;
+  size_t known = grown.size();
+  Box ahead = grow({start + u * 1.2 - Vec3{0.2, 0.2, 0.2}, start + u * 1.2 + Vec3{0.2, 0.2, 0.2}}, kMargin);
+  mark(g, ahead);
+  grown.push_back(ahead);
+
+  REQUIRE(replan(path, g, grown, known, start, goal, &vel));
+  // no braking leg: the velocity comes back zero and the path starts at the drone or the free cell next to it
+  CHECK(norm(vel) == 0);
+  REQUIRE(path.size() >= 2);
+  CHECK(norm(path.front() - start) < 1.5);
+  CHECK(norm(path.back() - goal) < 1e-9);
+}
+
+TEST_CASE("replan at speed: when there's no way on from where it would stop, it plans from where it is instead") {
+  // open air, and a cage the drone is flying straight at, open towards it through a 1.2 m slot. the braking line
+  // fits through the slot (it only needs the drone's 0.356 m reach each side) but a* keeps the 0.79 m margin and can't,
+  // so from the stopping point inside the cage there's no way out
+  Grid g = city_grid({});
+  // 1.4 m out from the cage, far enough to be outside its margin, going fast enough to stop 2.7 m on, inside it
+  Vec3 from{-1, 0, 5}, goal = g.center(g.ix(10), g.iy(0), g.iz(5)), vel{5.2, 0, 0};
+  std::vector<Box> cage = {
+      {{4.0, -2.2, 2.8}, {4.2, 2.2, 7.2}},   // back
+      {{0.4, 2.0, 2.8}, {4.2, 2.2, 7.2}},    // left
+      {{0.4, -2.2, 2.8}, {4.2, -2.0, 7.2}},  // right
+      {{0.4, -2.2, 7.0}, {4.2, 2.2, 7.2}},   // top
+      {{0.4, -2.2, 2.8}, {4.2, 2.2, 3.0}},   // bottom
+      // the front, around a 1.2 m square slot
+      {{0.4, 0.6, 2.8}, {0.6, 2.2, 7.2}},
+      {{0.4, -2.2, 2.8}, {0.6, -0.6, 7.2}},
+      {{0.4, -0.6, 5.6}, {0.6, 0.6, 7.2}},
+      {{0.4, -0.6, 2.8}, {0.6, 0.6, 4.4}},
+  };
+  std::vector<Box> grown;
+  for (const Box& b : cage) {
+    grown.push_back(grow(b, kMargin));
+    mark(g, grown.back());
+  }
+  Vec3 stop = from + vel * (norm(vel) / (2 * kBrake));
+  REQUIRE(!g.blocked(g.ix(stop.x), g.iy(stop.y), g.iz(stop.z)));
+  REQUIRE(astar(g, stop, goal).empty());
+
+  std::vector<Vec3> path = {from, goal};
+  REQUIRE(replan(path, g, grown, 0, from, goal, &vel));
+  // it found the way round the outside, from the drone, flown from rest
+  REQUIRE(path.size() >= 2);
+  CHECK(norm(vel) == 0);
+  CHECK(norm(path.front() - from) < 1e-9);
+  CHECK(norm(path.back() - goal) < 1e-9);
 }

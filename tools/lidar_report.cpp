@@ -75,6 +75,8 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& cit
   Flight f;
   // when the current path started, and when to stop: its flight time plus 3 s to settle, 120 s at most
   int start_i = 0, end_i = int(std::lround((path_time(path, 5, 3) + 3) / 0.001));
+  // how fast it was going at the last replan, the path brakes from it first
+  Vec3 v0;
   for (int i = 1; i <= end_i && i <= 120000; i++) {
     double t = (i - start_i) * 0.001;
     // imu every step, gps and magnetometer at 10 Hz
@@ -93,7 +95,9 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& cit
       f.scan_ms.push_back(ms_since(t0));
       // only replan when the new cells cut the path it's on (the shared rule in core/lidar.cpp)
       t0 = std::chrono::steady_clock::now();
-      if (added && replan(path, g, grown, known, e.p, goal)) {
+      // the new path brakes from the speed it's going instead of stopping dead
+      Vec3 v = e.v;
+      if (added && replan(path, g, grown, known, e.p, goal, &v)) {
         f.replan_ms.push_back(ms_since(t0));
         if (f.seen_at < 0) f.seen_at = box_dist(s.p, dropped);
         f.replans++;
@@ -104,12 +108,13 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& cit
         }
         yaw = heading(e.q);
         start_i = i;
-        end_i = i + int(std::lround((path_time(path, 5, 3) + 3) / 0.001));
+        v0 = v;
+        end_i = i + int(std::lround((path_time(path, 5, 3, v0) + 3) / 0.001));
         t = 0;
       }
     }
 
-    Setpoint sp = follow(path, t, 5, 3, yaw);
+    Setpoint sp = follow(path, t, 5, 3, yaw, v0);
     s = step(P, s, control(c, P, estimate(est), sp, 0.001), 0.001);
     // how close the real drone gets to the ground, the buildings and the dropped box
     f.clearance = std::min(f.clearance, s.p.z);

@@ -28,6 +28,8 @@ static std::vector<Box> boxes, grown;
 static Grid grid(1, 1, 1);
 static std::vector<Vec3> path;
 static double path_t = 0, path_yaw = 0;
+// how fast it was going when a replan started this path, follow() brakes from it first. zero for any other path
+static Vec3 path_v0;
 static bool following = false;
 
 // path speed: 5 m/s cruise with 3 m/s^2 ramps, stopping at each waypoint (the ramped route from results/control.md)
@@ -95,9 +97,11 @@ static void lidar_turn() {
   }
   size_t known = grown.size();
   const QuadState& n = nav();
+  // replans start at the speed it's going, so the new path brakes from it instead of stopping dead
+  Vec3 v = n.v;
   // no replans on the way down, the pad is under the planner's floor so every one would fail
   if (add_hits(grid, grown, hits, boxes, n.p) && following && !landing &&
-      replan(path, grid, grown, known, n.p, goal)) {
+      replan(path, grid, grown, known, n.p, goal, &v)) {
     // no way through, or a path too long to draw: hold where it thinks it is.
     // the hold is one point, so nothing can cut it and it won't replan again on its own
     publish_path();
@@ -107,6 +111,7 @@ static void lidar_turn() {
     }
     path_yaw = heading(n.q);
     path_t = 0;
+    path_v0 = v;
     replans++;
   }
 }
@@ -189,7 +194,7 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
     if (following && replans == before) path_t += DT;
 
     // when flying a path, the setpoint slides along it
-    if (following) sp = follow(path, path_t, speed, ramp, path_yaw);
+    if (following) sp = follow(path, path_t, speed, ramp, path_yaw, path_v0);
 
     // the controller flies on the estimate (or the truth), the physics moves the real drone through the wind
     prev = s;
@@ -297,6 +302,7 @@ EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
   // keep facing the way it thinks it faces now until the path moves sideways
   path_yaw = heading(nav().q);
   path_t = 0;
+  path_v0 = {};
   following = !path.empty();
   return int(path.size());
 }
@@ -333,7 +339,7 @@ EMSCRIPTEN_KEEPALIVE double* hits_ptr() { return hit_buf; }
 EMSCRIPTEN_KEEPALIVE int hits_len() { return hit_count; }
 
 // true once the setpoint has reached the end of the path
-EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, speed, ramp); }
+EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, speed, ramp, path_v0); }
 
 // comes down from where it thinks it is onto the ground at x, y (the pad), slowly, and turns the motors off on touchdown.
 // the path aims 1 m under the ground so it's still coming down at landing speed when the skids touch, even with the
@@ -346,6 +352,7 @@ EMSCRIPTEN_KEEPALIVE void land(double x, double y) {
   publish_path();
   path_yaw = heading(n.q);
   path_t = 0;
+  path_v0 = {};
   following = landing = ground_ok = true;
   speed = ramp = kLandSpeed;
 }

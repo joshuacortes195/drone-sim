@@ -48,8 +48,9 @@ static double leg_cruise(Vec3 d, double cruise) {
 }
 
 // total seconds to fly a whole path, stopping at every waypoint
-double path_time(const std::vector<Vec3>& path, double cruise, double accel) {
-  double T = 0;
+double path_time(const std::vector<Vec3>& path, double cruise, double accel, Vec3 v0) {
+  // the braking leg first, if it starts at speed
+  double T = norm(v0) / kBrake;
   for (size_t i = 1; i < path.size(); i++) {
     Vec3 d = path[i] - path[i - 1];
     if (norm(d) > 0) T += leg_time(norm(d), leg_cruise(d, cruise), accel);  // a repeated point takes no time
@@ -57,10 +58,25 @@ double path_time(const std::vector<Vec3>& path, double cruise, double accel) {
   return T;
 }
 
-Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel, double yaw) {
+Setpoint follow(const std::vector<Vec3>& path, double t, double cruise, double accel, double yaw, Vec3 v0) {
   Setpoint sp;
   sp.yaw = yaw;
   if (path.empty()) return sp;
+  // starting at speed: slow down at kBrake along the way it's going, so it comes to rest right on the first point
+  double v_start = norm(v0);
+  if (v_start > 0) {
+    double tb = v_start / kBrake;
+    Vec3 u = v0 * (1 / v_start);
+    if (t < tb) {
+      Vec3 start = path[0] - u * (v_start * v_start / (2 * kBrake));
+      sp.pos = start + v0 * t - u * (kBrake * t * t / 2);
+      sp.vel = v0 - u * (kBrake * t);
+      sp.acc = u * -kBrake;
+      return sp;
+    }
+    // after that it's the plain path, just that much later
+    t -= tb;
+  }
   sp.pos = path.back();
   for (size_t i = 1; i < path.size(); i++) {
     Vec3 d = path[i] - path[i - 1];
