@@ -141,28 +141,30 @@ TEST_CASE("landing: from a 2 m hover it comes straight down to skid height, slow
   CHECK(tilt < 0.01);
 }
 
-TEST_CASE("follow: a path given a starting velocity brakes from it in a straight line and ends the braking at rest on the first point") {
-  // the drone is doing 4 m/s east and 1 m/s up when the path starts, it stops at kBrake first
+TEST_CASE("follow: with a starting velocity the first leg is a straight braking leg from it, ending at rest on the second point") {
+  // the drone is doing 4 m/s east and 1 m/s up at the first point, and stops at kBrake where the braking leg ends
   Vec3 v0{4, 0, 1};
   double sp = norm(v0), tb = sp / kBrake;
   Vec3 u = v0 * (1 / sp);
-  Setpoint a = follow(L_PATH, 0, 5, 3, 0, v0);
-  // it starts where braking at kBrake ends on the first point, already at the drone's speed
-  CHECK(norm(a.pos - (L_PATH[0] - u * (sp * sp / (2 * kBrake)))) < 1e-9);
+  std::vector<Vec3> path = {L_PATH[0] - u * (sp * sp / (2 * kBrake))};
+  path.insert(path.end(), L_PATH.begin(), L_PATH.end());
+  Setpoint a = follow(path, 0, 5, 3, 0, v0);
+  // it starts on the first point, already at the drone's speed, slowing down along it
+  CHECK(norm(a.pos - path[0]) < 1e-9);
   CHECK(norm(a.vel - v0) < 1e-9);
   CHECK(norm(a.acc + u * kBrake) < 1e-9);
   // halfway through the braking it's slowed by half
-  CHECK(norm(follow(L_PATH, tb / 2, 5, 3, 0, v0).vel - v0 * 0.5) < 1e-9);
-  // the braking ends at rest on the first point, then it's the plain path, just later
-  Setpoint b = follow(L_PATH, tb, 5, 3, 0, v0);
-  CHECK(norm(b.pos - L_PATH[0]) < 1e-9);
+  CHECK(norm(follow(path, tb / 2, 5, 3, 0, v0).vel - v0 * 0.5) < 1e-9);
+  // the braking ends at rest on the second point, then it's the rest of the path, just later
+  Setpoint b = follow(path, tb, 5, 3, 0, v0);
+  CHECK(norm(b.pos - path[1]) < 1e-9);
   CHECK(norm(b.vel) < 1e-9);
   for (double t : {0.5, 2.0, 5.0}) {
-    Setpoint later = follow(L_PATH, tb + t, 5, 3, 0, v0), plain = follow(L_PATH, t, 5, 3);
+    Setpoint later = follow(path, tb + t, 5, 3, 0, v0), plain = follow(L_PATH, t, 5, 3);
     CHECK(norm(later.pos - plain.pos) < 1e-9);
     CHECK(norm(later.vel - plain.vel) < 1e-9);
   }
-  CHECK(path_time(L_PATH, 5, 3, v0) == doctest::Approx(path_time(L_PATH, 5, 3) + tb).epsilon(1e-12));
+  CHECK(path_time(path, 5, 3, v0) == doctest::Approx(path_time(L_PATH, 5, 3) + tb).epsilon(1e-12));
 }
 
 TEST_CASE("follow: no starting velocity is the plain path") {

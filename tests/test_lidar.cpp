@@ -336,20 +336,31 @@ TEST_CASE("replan at speed: the new path starts where the drone stops braking, a
   grown.push_back(ahead);
 
   REQUIRE(replan(path, g, grown, known, start, goal, &vel));
-  // braking at kBrake from 4 m/s takes 1.6 m, the new path starts there and the velocity is kept for follow()
+  // braking at kBrake from 4 m/s takes 1.6 m: the path's first leg is that braking, from the drone to where it
+  // stops, and the velocity is kept for follow()
   Vec3 stop = start + u * (16 / (2 * kBrake));
   CHECK(norm(vel - u * 4) < 1e-12);
-  REQUIRE(path.size() >= 2);
-  CHECK(norm(path.front() - stop) < 1e-9);
+  REQUIRE(path.size() >= 3);
+  CHECK(norm(path[0] - start) < 1e-9);
+  CHECK(norm(path[1] - stop) < 1e-9);
   CHECK(norm(path.back() - goal) < 1e-9);
   CHECK(!path_blocked(path, {ahead}));
   // the setpoint picks up right where the drone is, at its speed
   Setpoint sp = follow(path, 0, 5, 3, 0, vel);
   CHECK(norm(sp.pos - start) < 1e-9);
   CHECK(norm(sp.vel - vel) < 1e-12);
+
+  // the braking leg is part of the path, so something new on it sets off the next replan like any other leg
+  Vec3 mid = (start + stop) * 0.5;
+  size_t known2 = grown.size();
+  Box on_brake = grow({mid - Vec3{0.1, 0.1, 0.1}, mid + Vec3{0.1, 0.1, 0.1}}, kMargin);
+  mark(g, on_brake);
+  grown.push_back(on_brake);
+  Vec3 vel2 = vel * 0.8;
+  CHECK(replan(path, g, grown, known2, start + u * 0.3, goal, &vel2));
 }
 
-TEST_CASE("replan at speed: when braking straight would run into the new box, it plans from where it is like before") {
+TEST_CASE("replan at speed: when braking straight would come inside the margin of the new box, it plans from where it is like before") {
   auto boxes = city(3);
   Grid g = city_grid(boxes);
   std::vector<Box> grown;
@@ -359,11 +370,12 @@ TEST_CASE("replan at speed: when braking straight would run into the new box, it
   auto path = smooth(astar(g, start, goal), grown);
   REQUIRE(path.size() >= 2);
 
-  // a small box 1.2 m ahead, inside the 1.6 m it would take to stop from 4 m/s
+  // a small box 2.4 m ahead: past the 1.6 m it takes to stop from 4 m/s, and the drone's reach would clear it, but
+  // the braking leg would come inside the planner's 0.79 m margin of it, closer than any planned leg is allowed
   Vec3 u = (path[1] - path[0]) * (1 / norm(path[1] - path[0]));
   Vec3 vel = u * 4;
   size_t known = grown.size();
-  Box ahead = grow({start + u * 1.2 - Vec3{0.2, 0.2, 0.2}, start + u * 1.2 + Vec3{0.2, 0.2, 0.2}}, kMargin);
+  Box ahead = grow({start + u * 2.4 - Vec3{0.2, 0.2, 0.2}, start + u * 2.4 + Vec3{0.2, 0.2, 0.2}}, kMargin);
   mark(g, ahead);
   grown.push_back(ahead);
 

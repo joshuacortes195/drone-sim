@@ -111,7 +111,8 @@ static void lidar_turn() {
     }
     path_yaw = heading(n.q);
     path_t = 0;
-    path_v0 = v;
+    // a hold starts from rest, even if the path it replaced was going to brake
+    path_v0 = path.size() > 1 ? v : Vec3{};
     replans++;
   }
 }

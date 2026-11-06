@@ -57,14 +57,13 @@ bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grow
             Vec3 goal, Vec3* vel) {
   // only the new boxes matter, the old ones were already planned around
   if (!path_blocked(path, std::vector<Box>(grown.begin() + long(new_from), grown.end()))) return false;
-  // moving: plan from where braking straight ahead ends, if that stays inside the flying area and the drone's reach
-  // never touches anything on the way (the grown boxes shrunk back to the reach)
+  // moving: plan from where braking straight ahead ends, if that stays inside the flying area and the braking leg
+  // keeps the same margin from everything known that every planned leg gets (clear of the grown boxes and the floor)
   Vec3 start = from;
   bool braking = false;
   if (vel && norm(*vel) > 0) {
     Vec3 stop = from + *vel * (norm(*vel) / (2 * kBrake));
-    braking = g.inside(g.ix(stop.x), g.iy(stop.y), g.iz(stop.z)) && stop.z > kReach;
-    for (size_t i = 0; i < grown.size() && braking; i++) braking = !segment_hits(from, stop, grow(grown[i], kReach - kMargin));
+    braking = g.inside(g.ix(stop.x), g.iy(stop.y), g.iz(stop.z)) && stop.z > kMargin && !path_blocked({from, stop}, grown);
     if (braking) start = stop;
   }
   // a fresh path on everything it knows now
@@ -84,5 +83,7 @@ bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grow
     else if (braking) path.insert(path.begin(), start);
   }
   path = smooth(path, grown);
+  // the braking leg goes first, from the drone to where it stops, so the next scan checks it like any other leg
+  if (braking && !path.empty()) path.insert(path.begin(), from);
   return true;
 }

@@ -35,9 +35,9 @@ bool add_hits(Grid& g, std::vector<Box>& grown, const std::vector<Vec3>& hits, c
 // the replan rule the page and lidar_report share. when the boxes add_hits just added (grown from new_from on)
 // cut the path, plans a new one from where the drone thinks it is to the goal. true when it replanned.
 // the new path is empty when there's no way through, the caller decides what to do then.
-// vel, if given, is how fast the drone is going. it can't stop on the spot, so the new path starts where braking
-// straight at kBrake ends, and vel stays for follow() to brake from. vel comes back zero when that braking line would
-// come within the drone's reach of something or leave the flying area, or when there's no path: then it plans from
-// where it is, like a drone at rest
+// vel, if given, is how fast the drone is going. it can't stop on the spot, so the new path's first leg is braking
+// straight at kBrake from where it is to where it stops, the rest is planned from there, and vel stays for follow()
+// to brake from. vel comes back zero when that braking leg would come closer to something than the planner's margin,
+// end outside the flying area, or there's no way on from its end: then it plans from where it is, like a drone at rest
 bool replan(std::vector<Vec3>& path, const Grid& g, const std::vector<Box>& grown, size_t new_from, Vec3 from,
             Vec3 goal, Vec3* vel = nullptr);
