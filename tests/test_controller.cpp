@@ -49,16 +49,41 @@ TEST_CASE("mixer: a yaw request too big to do gives way, thrust and roll stay ex
   CHECK(f.torque.z < 1.0);
 }
 
-TEST_CASE("mixer: a roll request too big to do shrinks roll and drops yaw, thrust stays exact") {
+// rotors pinned at both ends means no thrust level would have fit more roll
+TEST_CASE("mixer: a roll request too big for any thrust gets the most roll the rotors can make, and drops yaw") {
   Rotors r = mix(P, 15.0, {5.0, 0, 0.05});
   Wrench f = push_from(r);
   CHECK(all_in_range(r));
-  CHECK(some_rotor_maxed(r));
-  CHECK(f.force.z == doctest::Approx(15.0).epsilon(1e-9));
+  CHECK(*std::min_element(r.begin(), r.end()) < 1e-6);
+  CHECK(*std::max_element(r.begin(), r.end()) > P.max_rotor_speed - 1e-6);
   CHECK(f.torque.x > 0.5);
   CHECK(f.torque.x < 5.0);
   CHECK(std::abs(f.torque.y) < 1e-9);
   CHECK(std::abs(f.torque.z) < 1e-9);
+}
+
+// the seed 962 crash: braking hard near full thrust, the mixer kept the thrust and handed out a fifth of the roll,
+// so the drone tipped past 50 degrees. now thrust gives way so roll and pitch come out exact
+TEST_CASE("mixer: near full thrust, a roll that only fits with less thrust comes out exact, thrust drops only that far") {
+  Rotors r = mix(P, 21.0, {1.0, -0.4, 0});
+  Wrench f = push_from(r);
+  CHECK(all_in_range(r));
+  CHECK(some_rotor_maxed(r));
+  CHECK(std::abs(f.torque.x - 1.0) < 1e-9);
+  CHECK(std::abs(f.torque.y + 0.4) < 1e-9);
+  CHECK(f.force.z < 21.0);
+  CHECK(f.force.z > P.mass * 9.81);
+}
+
+// same thing at the bottom end: thrust goes up a little so no rotor would have to spin backwards
+TEST_CASE("mixer: near zero thrust, a roll that only fits with more thrust comes out exact, thrust rises a little") {
+  Rotors r = mix(P, 3.0, {1.0, 0, 0});
+  Wrench f = push_from(r);
+  CHECK(all_in_range(r));
+  CHECK(some_rotor_maxed(r));
+  CHECK(std::abs(f.torque.x - 1.0) < 1e-9);
+  CHECK(f.force.z > 3.0);
+  CHECK(f.force.z < 8.0);
 }
 
 TEST_CASE("mixer: thrust past what four rotors can make clamps to full speed, never past it") {

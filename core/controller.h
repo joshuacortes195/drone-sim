@@ -3,7 +3,7 @@
 #include "quad.h"
 
 // rotor speeds that make this total thrust (N) and body torque (N m). when the rotors can't do it all,
-// thrust is kept, then roll and pitch, and yaw gives way first
+// roll and pitch come first (thrust moves up or down to make room for them if that's enough), then thrust, and yaw gives way first
 Rotors mix(const QuadParams& P, double thrust, Vec3 torque);
 
 // where the drone should be: a position, the path's own velocity and acceleration (zero to just hold) and a heading

@@ -47,10 +47,21 @@ static double fit(const Vec4& t, const Vec4& d, double t_max) {
 
 Rotors mix(const QuadParams& P, double thrust, Vec3 torque) {
   double t_max = P.k_f * P.max_rotor_speed * P.max_rotor_speed;
-  // total thrust first, it's what keeps the drone in the air
-  Vec4 t = solve(P, {std::clamp(thrust, 0.0, 4 * t_max), 0, 0, 0});
-  // then as much roll and pitch as fits on top
+  // what one newton of total thrust and the wanted roll and pitch each ask of every rotor
+  Vec4 one = solve(P, {1, 0, 0, 0});
   Vec4 rp = solve(P, {0, torque.x, torque.y, 0});
+  // the range of total thrust where all of that roll and pitch fits with every rotor between off and full
+  double lo = 0, hi = 4 * t_max;
+  for (int i = 0; i < 4; i++) {
+    lo = std::max(lo, -rp[i] / one[i]);
+    hi = std::min(hi, (t_max - rp[i]) / one[i]);
+  }
+  // roll and pitch keep it upright, so thrust gives way to them: moved just enough when that makes it all fit,
+  // or halfway between when nothing does, where the opposite rotors have the same room and the most roll and pitch fits
+  double want = std::clamp(thrust, 0.0, 4 * t_max);
+  want = lo <= hi ? std::clamp(want, lo, hi) : (lo + hi) / 2;
+  Vec4 t;
+  for (int i = 0; i < 4; i++) t[i] = want * one[i];
   double a = fit(t, rp, t_max);
   for (int i = 0; i < 4; i++) t[i] += a * rp[i];
   // yaw last, it's the weakest axis and the least dangerous to give up
