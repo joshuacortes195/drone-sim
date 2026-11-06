@@ -165,9 +165,13 @@ EMSCRIPTEN_KEEPALIVE void set_target(double x, double y, double z, double yaw) {
 // runs the controller and physics forward some 1 ms steps. the page calls it one step at a time so it can check
 // the mission after each step, a big batch is only used to time the pure wasm cost
 EMSCRIPTEN_KEEPALIVE void advance(int steps) {
-  // a landed drone sits still with the motors off until it's sent somewhere
-  for (int i = 0; i < steps && !crash && !landed; i++) {
+  for (int i = 0; i < steps && !crash; i++) {
     tick++;
+    // a landed drone sits still with the motors off until it's sent somewhere. the clock keeps going for the page
+    if (landed) {
+      prev = s;
+      continue;
+    }
     // the wind this step, the imu feels its drag and the physics moves the drone through it
     Vec3 air = wind_step(wnd, DT);
     // imu every step, gps and magnetometer at 10 Hz
@@ -195,13 +199,18 @@ EMSCRIPTEN_KEEPALIVE void advance(int steps) {
     Vec3 hit = s.p;
     if (ground_ok) hit.z = std::max(hit.z, kReach);
     if (crashed(hit, world)) crash = true;
-    // skids on the pad: motors off and it stays put. once it has climbed clear, the ground counts again
-    if (landing && s.p.z < kSkid + 0.01 && std::abs(s.v.z) < 0.3) {
+    // skids on the ground, going by the real drone since the ground is what stops it: motors off and it stays put,
+    // unless it came down faster than 1 m/s, which is a crash. once it has climbed clear, the ground counts again
+    if (landing && s.p.z <= kSkid) {
       landing = false;
-      landed = true;
-      s.p.z = kSkid;
-      s.v = s.w = Vec3{};
-      s.rotor = {0, 0, 0, 0};
+      if (std::abs(s.v.z) > 1) {
+        crash = true;
+      } else {
+        landed = true;
+        s.p.z = kSkid;
+        s.v = s.w = Vec3{};
+        s.rotor = {0, 0, 0, 0};
+      }
     }
     if (!landing && !landed && s.p.z > kReach + 0.2) ground_ok = false;
   }
@@ -276,11 +285,14 @@ EMSCRIPTEN_KEEPALIVE int is_crashed() { return crash; }
 // plans a smoothed path from where the drone thinks it is to the goal and starts flying it.
 // returns how many waypoints it has, 0 when there's no way there (the drone then just holds)
 EMSCRIPTEN_KEEPALIVE int fly_to(double x, double y, double z) {
+  // landing or landed and there's no way there: it carries on landing, or stays on the ground
+  std::vector<Vec3> plan = smooth(astar(grid, nav().p, {x, y, z}), grown);
+  if (plan.empty() && (landing || landed)) return 0;
   // flying off the pad after a landing, at the normal path speed again
   landing = landed = false;
   speed = CRUISE, ramp = ACCEL;
   goal = {x, y, z};
-  path = smooth(astar(grid, nav().p, goal), grown);
+  path = plan;
   publish_path();
   // keep facing the way it thinks it faces now until the path moves sideways
   path_yaw = heading(nav().q);
@@ -323,11 +335,14 @@ EMSCRIPTEN_KEEPALIVE int hits_len() { return hit_count; }
 // true once the setpoint has reached the end of the path
 EMSCRIPTEN_KEEPALIVE int path_done() { return !following || path_t >= path_time(path, speed, ramp); }
 
-// comes straight down from where it thinks it is onto the ground below, slowly, and turns the motors off on touchdown
-EMSCRIPTEN_KEEPALIVE void land() {
+// comes down from where it thinks it is onto the ground at x, y (the pad), slowly, and turns the motors off on touchdown.
+// the path aims 1 m under the ground so it's still coming down at landing speed when the skids touch, even with the
+// estimate a few centimeters off. touchdown itself goes by the real drone hitting the ground
+EMSCRIPTEN_KEEPALIVE void land(double x, double y) {
   const QuadState& n = nav();
-  goal = {n.p.x, n.p.y, kSkid};
-  path = {n.p, goal};
+  goal = {x, y, kSkid - 1};
+  // lines up over the spot at the height it's at, then comes straight down
+  path = {n.p, {x, y, n.p.z}, goal};
   publish_path();
   path_yaw = heading(n.q);
   path_t = 0;

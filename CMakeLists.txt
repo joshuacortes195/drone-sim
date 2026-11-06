@@ -26,8 +26,11 @@ target_compile_options(core PRIVATE ${WARN_FLAGS})
 # native test runner, skipped when building for the browser
 if(NOT EMSCRIPTEN)
   enable_testing()
-  add_executable(tests tests/test_main.cpp tests/test_quad.cpp tests/test_controller.cpp tests/test_planning.cpp tests/test_route.cpp tests/test_sensors.cpp tests/test_estimator.cpp tests/test_lidar.cpp tests/test_wind.cpp)
+  add_executable(tests tests/test_main.cpp tests/test_quad.cpp tests/test_controller.cpp tests/test_planning.cpp tests/test_route.cpp tests/test_sensors.cpp tests/test_estimator.cpp tests/test_lidar.cpp tests/test_wind.cpp
+                       tests/test_bindings.cpp wasm/bindings.cpp)
   target_include_directories(tests SYSTEM PRIVATE third_party/doctest)
+  # the page's bindings build natively against a stand in for emscripten's header
+  target_include_directories(tests SYSTEM PRIVATE tests/stub)
   target_include_directories(tests PRIVATE tools)
   target_compile_options(tests PRIVATE ${WARN_FLAGS})
   target_link_libraries(tests PRIVATE core)

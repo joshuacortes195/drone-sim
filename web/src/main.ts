@@ -161,10 +161,11 @@ function goTo(i: number) {
   for (let tries = 0; tries < goals.length; tries++, i++) {
     // past the last goal: a loop starts over, anything else is done and holds where it is
     if (i >= goals.length) {
-      // go home ends by coming straight down onto the pad, it's done once the skids touch
-      if (mission === 'home' && !landing) {
+      // go home ends by coming down onto the pad, it's done once the skids touch. only if it really got over the pad,
+      // a skipped last leg would have it come straight down onto whatever it's over
+      if (mission === 'home' && !landing && goal === HOME) {
         landing = true;
-        sim._land();
+        sim._land(HOME[0], HOME[1]);
         drawPath();
         // the goal marker would sit on the pad right under the drone, so it's hidden until the next goal
         target.visible = false;
@@ -243,7 +244,8 @@ function updateMission() {
     // a failed replan leaves a hold, one point where the drone is. a mission that doesn't loop holds there and says so,
     // instead of counting it as reached and claiming it's done. right next to the goal it counts as there: that's a
     // goal by a wall the lidar just saw, its cell is now too close to the wall to plan into (results/eval.md)
-    const dx = now[0] - goal[0], dy = now[1] - goal[1], dz = now[2] - goal[2];
+    // judged on the estimate, the same one the core plans and flies on
+    const dx = estNow[0] - goal[0], dy = estNow[1] - goal[1], dz = estNow[2] - goal[2];
     const there = dx * dx + dy * dy + dz * dz < ARRIVED_M * ARRIVED_M;
     if (!loop && sim._path_len() <= 1 && !there) {
       stuck = true;
@@ -362,8 +364,8 @@ function sendTo(x: number, y: number, z: number) {
   const n = sim._fly_to(x, y, z);
   planMs = performance.now() - t0;
   if (n === 0) {
-    // a failed plan leaves the drone holding, so plan the old goal again
-    sim._fly_to(goal[0], goal[1], goal[2]);
+    // a failed plan leaves the drone holding, so plan the old goal again. landing or landed it never stopped
+    if (!landing && !sim._is_landed()) sim._fly_to(goal[0], goal[1], goal[2]);
     drawPath();
     setReadout({ note: "can't find a way there, try another spot" });
     return;
@@ -391,11 +393,11 @@ function searchGoals() {
   return [...rows, HOME];
 }
 
-// go home: climbs straight up to the search height first if it's lower, flies over the pad no higher than that,
+// go home: climbs straight up to the search height first if it's lower, flies over the pad at that height,
 // comes down to 2 m and then lands
 function homeGoals(): [number, number, number][] {
   const climb: [number, number, number][] = now[2] < SEARCH_Z ? [[now[0], now[1], SEARCH_Z]] : [];
-  return [...climb, [HOME[0], HOME[1], Math.max(HOME[2], Math.min(now[2], SEARCH_Z))], HOME];
+  return [...climb, [HOME[0], HOME[1], SEARCH_Z], HOME];
 }
 
 // starts a preset from wherever the drone is: the waypoint route (loops), the lawnmower search or return to home
