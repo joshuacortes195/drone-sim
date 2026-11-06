@@ -61,7 +61,7 @@ The windy column there leaves out the crash (999 flights).
 
 The change made the median and p95 a little better everywhere and the windy worst case better (0.610 to 0.469 m). The calm worst case got worse (0.472 to 0.658 m). That's the same kind of flight as seed 127 in `results/planning.md`: in a hard turn there's no thrust level where all the roll and pitch fits, so the mixer gives up some thrust, the drone sinks a little, and the outer loop spends a moment climbing back with no thrust left for sideways force.
 
-The heading cap barely moved the calm worst case (0.658 to 0.657 m) and made the windy one a bit worse (0.469 to 0.530 m). I haven't traced which flights those are yet.
+The heading cap barely moved the calm worst case (0.658 to 0.657 m) and made the windy one a bit worse (0.469 to 0.530 m). I haven't traced which flights those are yet. The cap fixed seed 127's hard turn in `results/planning.md` but not this calm worst case, so my "same kind of flight as seed 127" explanation above probably doesn't hold for it.
 
 Planning, the same trips for both winds:
 
