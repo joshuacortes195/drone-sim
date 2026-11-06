@@ -183,7 +183,8 @@ Split in two: 6a controls, 6b presets and the graphics pass.
 - gifs (2026-11-05): `docs/images/route.gif` and `docs/images/landing.gif`, recorded with agent-browser at 12 fps and cut to 560 px, 8 fps, 64 colors with ffmpeg (2.4 MB and 1.9 MB)
 - search coverage and a heading fix (2026-11-06, Mac): `tools/search_report.cpp` flies the page's search through the page's own bindings over 100 cities and scores the real track (a cell counts within 6 m sideways, half the row spacing). Seed 31 clipped a roof on the way home: a 135° heading change as the leg started bent the roll and pitch the attitude loop read off the whole error. The heading setpoint now leads the nose by at most 0.32 rad (test first). After it: 100 of 100 searches finish, 99.78% covered at worst in calm air and 99.45% in a 4 m/s breeze with 1.5 m/s gusts, the worst planned flight's tracking error went from 0.91 to 0.40 m, eval still 1000 of 1000 in both winds. All flight results rerun on the Mac (`results/search.md`)
 - browser checks the same day: a goal tapped on a wall in the chase view plans and holds, and on a phone sized screen the open controls now sit above the error plot, which used to hide the gusts slider and the gps toggle (`results/browser.md`)
-- still to do: the eval rerun on the PC, a check on a real phone
+- the eval now prints peak tilt and the seed behind each worst case, and `batch_eval 1 <seed>` flies one trip. The worst calm and windy flights (seeds 630, 820) are both a replan at cruise speed: the new path starts from rest, so the drone overshoots it by up to 2.6 m toward what the lidar just saw. Next fix: start a replanned path at the drone's current speed
+- still to do: the eval rerun on the PC, a check on a real phone, a replan that starts at speed
 
 ## How I'll measure things
 

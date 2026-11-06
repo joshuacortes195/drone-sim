@@ -506,7 +506,10 @@ I decided what success means before running it: no crash, done inside 120 s, and
 
 Here's how I first explained the one failure. On seed 962 the path ends with a 1 m leg flown downwind to a goal right next to a wall. A gust pushed the drone to 2.3 m/s where the setpoint only asked for 1.7, and braking against the breeze tilted it to 53°. At hover the motors run 660 of their 838 rad/s, and thrust goes with speed squared, so they have 1.61 times hover thrust. Past about 52° of tilt that's not enough to hold altitude. It sank 0.6 m, swung around the goal and its arm touched the wall. The planner leaves 0.43 m of slack past the drone's reach, and this used it up. It crashed again with a different gust stream, so it's the shape of that trip, not bad luck. That turned out to be wrong. When I traced it properly the controller had never asked for more than 34°: the mixer was giving the attitude loop a fifth of the torque it asked for, so the drone tipped past what it was told (the fix is in "Saturation and windup" above).
 
+The worst flights that are left all come from the same thing. The eval prints which seed each worst case came from, and flying those trips alone (`./build/batch_eval 1 630`) shows a replan at cruise speed. Every new path starts from rest, so a drone doing 4.8 m/s when the lidar sees something gets a setpoint that suddenly stands still, and at the 35° tilt limit it needs about 1.7 m just to stop. It overshoots by up to 2.6 m, along the way it was going, which is toward whatever it just saw. It still made every goal, but a new path should start at the drone's current speed instead. That's the next fix.
+
 Interview questions:
 - How do you define success for an autonomy test before you run it?
+- After a replan, why might a drone overshoot toward the obstacle it just saw, and how would you stop that?
 - Why fly the same trip with the same noise in both winds?
 - Where does a planning margin come from, and what eats into it?

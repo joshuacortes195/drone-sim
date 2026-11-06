@@ -17,7 +17,7 @@ Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "Th
 - success: no crash, inside 120 s, and the real drone within 1 m of the goal at the end. A trip with no plan would count as a failure in both winds (there were none)
 - tracking error: rms of the real drone's distance from the setpoint over every step flown, including the 3 s hold at the goal (about a fifth of a median flight), which is why it comes out below the 0.114 m in `results/control.md` for flying a route. Estimation error: rms of the estimate's distance from the real drone
 - crashed flights are left out of the error and time stats, so a crash doesn't read as a tracking or goal error
-- whole run: 245.6 s for 2000 flights on an idle machine (2026-11-04). The 2026-11-05 rerun shared the machine with a compile and two other runs and took 1482 s, so its times aren't used: the planning times below are from 2026-11-04 (same planner, same trips, same paths), and the replans are only counted. The 2026-11-06 rerun took 283.7 s but shared the machine with a browser rendering the sim, so its times aren't used either. Its path length ratios and straight line distances came out identical, so the plans are the same. Run with `./build/batch_eval 1000`
+- whole run: 245.6 s for 2000 flights on an idle machine (2026-11-04). The 2026-11-05 rerun shared the machine with a compile and two other runs and took 1482 s, so its times aren't used: the planning times below are from 2026-11-04 (same planner, same trips, same paths), and the replans are only counted. The 2026-11-06 rerun took 283.7 s but shared the machine with a browser rendering the sim, so its times aren't used either. Its path length ratios and straight line distances came out identical, so the plans are the same. A second 2026-11-06 run on an idle machine (258.5 s, the dev server open but no browser) printed the same flight numbers to the last digit, plus the new peak tilt and worst flight lines, and its planning times are the ones in the planning table now. Run with `./build/batch_eval 1000`, or `./build/batch_eval 1 962` to fly one seed's trip on its own
 
 ## Results
 
@@ -32,6 +32,8 @@ Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "Th
 | flight time (median, p95, worst) | 13.94, 20.11, 30.56 s | 13.90, 20.11, 30.56 s |
 | replans | 21, at most 2 per flight | 17, at most 1 per flight |
 | a replan found no path | 4 | 7 |
+| peak tilt per flight (median, p95, worst) | 27.97°, 31.42°, 35.50° | 27.70°, 33.88°, 35.07° |
+| worst flights (seed): tracking, off the goal, tilt | 630, 432, 468 | 820, 645, 468 |
 
 Before the heading cap (2026-11-05, same trips). Success, crashes, out of time and the failed replan counts came out the same:
 
@@ -61,13 +63,13 @@ The windy column there leaves out the crash (999 flights).
 
 The change made the median and p95 a little better everywhere and the windy worst case better (0.610 to 0.469 m). The calm worst case got worse (0.472 to 0.658 m). That's the same kind of flight as seed 127 in `results/planning.md`: in a hard turn there's no thrust level where all the roll and pitch fits, so the mixer gives up some thrust, the drone sinks a little, and the outer loop spends a moment climbing back with no thrust left for sideways force.
 
-The heading cap barely moved the calm worst case (0.658 to 0.657 m) and made the windy one a bit worse (0.469 to 0.530 m). I haven't traced which flights those are yet. The cap fixed seed 127's hard turn in `results/planning.md` but not this calm worst case, so my "same kind of flight as seed 127" explanation above probably doesn't hold for it.
+The heading cap barely moved the calm worst case (0.658 to 0.657 m) and made the windy one a bit worse (0.469 to 0.530 m). I traced both with a one seed scratch copy of `batch_eval` that logs the drone against its setpoint. Neither is the seed 127 kind of flight, so that explanation above doesn't hold for them. Both are a replan at cruise speed. On seed 630 (calm) the lidar sees something 8.1 s in while the drone is doing 4.8 m/s; on seed 820 (windy) it's 3.1 s in at 4.5 m/s. The new hits put the drone's own cell inside the new obstacle's margin, so `replan()` starts the new path from the nearest free cell A* found, 1.1 m to the side, and every new path starts from rest. The drone can't stop in no distance: it overshoots the restarted setpoint by up to 2.57 m (seed 630) and 2.12 m (seed 820), tilting to 35° to brake, and takes about 2 s to get back on it. Both flights still reach the goal. The overshoot is along the old direction of travel, which is toward whatever the lidar just saw, so this is the next thing I want to fix: a replan should start from the drone's current speed instead of from rest.
 
 Planning, the same trips for both winds:
 
 | | median | p95 | worst |
 |---|---|---|---|
-| a* + smooth (ms) | 10.38 | 44.58 | 114.78 |
+| a* + smooth (ms) | 10.73 (10.38 on 2026-11-04) | 48.13 (44.58) | 104.98 (114.78) |
 | path length / straight line | 1.009 | 1.091 | 1.184 |
 | straight line distance (m) | 36.4 | 59.1 | 77.2 |
 
@@ -79,7 +81,7 @@ Seed 962 in the wind. It crashed in both runs, with two different gust streams, 
 
 I first read that as running out of thrust margin. Tracing it showed something else. The controller never asked for more than 34° of tilt. The drone went to 53° on its own while the command was 25° and falling, and one rotor sat at full speed the whole time. The attitude loop wanted about 2.4 N m of torque to stop the tip, but the mixer kept the total thrust exact first and only fit roll and pitch on top, so it handed out 17 to 21% of what was asked. There was no headroom left on the rotor that needed to speed up.
 
-The fix is in `mix()` in `core/controller.cpp`: roll and pitch now come before thrust. If moving the total thrust up or down makes all of the roll and pitch fit, it moves just that far. If no thrust level fits it all, it goes to the middle of the range, where opposite rotors have the same room and the most of it fits. Yaw still gives way first. Two new tests in `tests/test_controller.cpp` cover both ends (near full thrust and near zero), and the old "roll too big" test now checks that a rotor ends up at both limits, meaning no other thrust level would have fit more. Seed 962 now peaks at 35.5° against a command of 34.4° and ends 0.38 m from the goal.
+The fix is in `mix()` in `core/controller.cpp`: roll and pitch now come before thrust. If moving the total thrust up or down makes all of the roll and pitch fit, it moves just that far. If no thrust level fits it all, it goes to the middle of the range, where opposite rotors have the same room and the most of it fits. Yaw still gives way first. Two new tests in `tests/test_controller.cpp` cover both ends (near full thrust and near zero), and the old "roll too big" test now checks that a rotor ends up at both limits, meaning no other thrust level would have fit more. Seed 962 then peaked at 35.5° against a command of 34.4° and ended 0.38 m from the goal. Since the heading cap its windy flight peaks at 31.3° over the whole trip (`./build/batch_eval 1 962`).
 
 I also tried only moving thrust when that makes everything fit, and keeping it otherwise. That also stopped the crash, but seed 962 still tipped to 50°, and its 1000 trip run had a windy worst case of 0.724 m. The middle of the range fixes the tipping itself, so I kept that.
 

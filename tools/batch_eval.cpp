@@ -51,6 +51,8 @@ const double BREEZE = 4, GUSTS = 1.5;
 struct Flight {
   bool crashed = false, timed_out = false, stuck = false;
   double end_error = 0, track_rms = 0, est_rms = 0, seconds = 0;
+  // the most the drone tipped from level on the whole flight, degrees
+  double max_tilt = 0;
   // how far from the goal it was when a replan found no path, and how long before the path's end that was
   double stuck_dist = 0, stuck_early_s = 0;
   int replans = 0;
@@ -136,6 +138,8 @@ static Flight fly(std::vector<Vec3> path, Vec3 goal, const std::vector<Box>& box
     // how far the real drone is from where it was told to be, and from where it thinks it is
     track_sum += norm(s.p - sp.pos) * norm(s.p - sp.pos);
     est_sum += norm(e.p - s.p) * norm(e.p - s.p);
+    // how far it's tipped from level right now
+    f.max_tilt = std::max(f.max_tilt, std::acos(std::clamp(rotate(s.q, {0, 0, 1}).z, -1.0, 1.0)) * 180 / 3.14159265358979);
     // a crash ends the flight, like the page
     if (crashed(s.p, boxes)) {
       f.crashed = true;
@@ -159,6 +163,10 @@ struct Tally {
   std::vector<std::array<double, 3>> stuck_at;
   // the crashes, kept out of the error stats so a crash doesn't read as a big tracking or goal error
   std::vector<double> crash_end;
+  // which seed gave the worst tracking, the worst miss of the goal and the most tilt, so they can be flown again alone
+  double worst_track = -1, worst_end = -1, worst_tilt = -1;
+  unsigned worst_track_seed = 0, worst_end_seed = 0, worst_tilt_seed = 0;
+  std::vector<double> tilt;
 };
 
 // adds one flight to the tally
@@ -178,6 +186,11 @@ static void count(Tally& t, const Flight& f, unsigned seed) {
     t.crash_end.push_back(f.end_error);
     return;
   }
+  // keeps track of the worst flights
+  if (f.track_rms > t.worst_track) t.worst_track = f.track_rms, t.worst_track_seed = seed;
+  if (f.end_error > t.worst_end) t.worst_end = f.end_error, t.worst_end_seed = seed;
+  if (f.max_tilt > t.worst_tilt) t.worst_tilt = f.max_tilt, t.worst_tilt_seed = seed;
+  t.tilt.push_back(f.max_tilt);
   t.track.push_back(f.track_rms);
   t.est.push_back(f.est_rms);
   t.end.push_back(f.end_error);
@@ -203,17 +216,23 @@ static void report(const char* name, const Tally& t) {
   summary("flight time (s)", t.seconds);
   summary("replans per flight", t.replans);
   summary("replan: a* + smooth (ms)", t.replan_ms);
+  summary("peak tilt per flight (deg)", t.tilt);
+  if (!t.tilt.empty())
+    std::printf("  worst flights: tracking on seed %u, off the goal on seed %u, tilt on seed %u\n", t.worst_track_seed,
+                t.worst_end_seed, t.worst_tilt_seed);
 }
 
 int main(int argc, char** argv) {
   // how many seeded cities to fly, 500 unless told otherwise
   const int seeds = argc > 1 ? std::atoi(argv[1]) : 500;
+  // the first seed, so one trip can be flown again on its own: batch_eval 1 962
+  const int first = argc > 2 ? std::atoi(argv[2]) : 0;
   auto run_start = std::chrono::steady_clock::now();
   int no_path = 0;
   std::vector<double> plan_ms, ratio, straight;
   Tally calm, windy;
 
-  for (uint32_t seed = 0; seed < uint32_t(seeds); seed++) {
+  for (uint32_t seed = uint32_t(first); seed < uint32_t(first + seeds); seed++) {
     // a seeded city and a random start and goal at least 20 m apart in free space. a different random stream from
     // plan_report and lidar_report, so these are new trips
     std::vector<Box> boxes = city(seed);
@@ -250,8 +269,8 @@ int main(int argc, char** argv) {
     count(windy, fly(path, b, boxes, BREEZE, GUSTS, seed + 30000), seed);
   }
 
-  std::printf("%d seeded cities (seeds 0 to %d), one random trip each, start and goal in free space at least 20 m apart\n",
-              seeds, seeds - 1);
+  std::printf("%d seeded cities (seeds %d to %d), one random trip each, start and goal in free space at least 20 m apart\n",
+              seeds, first, first + seeds - 1);
   std::printf("rtk estimate, lidar on with replanning, %.0f m/s cruise, %.0f m/s^2 ramps, %.0f ms physics, "
               "success = within %.0f m of the goal, no crash, inside %.0f s\n",
               CRUISE, ACCEL, DT * 1000, ARRIVED_M, TIME_LIMIT_S);
