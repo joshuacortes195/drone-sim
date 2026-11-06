@@ -108,6 +108,8 @@ static Result search(unsigned seed, double breeze, double gusts) {
 
   for (size_t g = 0; g < goals.size() && !r.crashed && !r.stuck; g++) {
     const Vec3 goal = goals[g];
+    // the way home isn't part of the sweep, even when the last row got skipped
+    if (g >= rows.size()) sweeping = false;
     // a goal it can't plan to gets skipped, like the page does
     if (fly_to(goal.x, goal.y, goal.z) == 0) {
       r.skipped++;
@@ -138,7 +140,7 @@ static Result search(unsigned seed, double breeze, double gusts) {
         }
       }
       // done with this goal once the path is flown and it's within 1 m of the path's end, same as the page
-      if (path_done()) {
+      if (path_done() && path_len() > 0) {
         const double* end = path_ptr() + 3 * (path_len() - 1);
         const Vec3 d{s[0] - end[0], s[1] - end[1], s[2] - end[2]};
         arrived = dot(d, d) < ARRIVED_M * ARRIVED_M;
@@ -148,9 +150,8 @@ static Result search(unsigned seed, double breeze, double gusts) {
       r.stuck = r.stuck || !r.crashed;
       break;
     }
-    // the sweep starts at the first row's start and ends at the last row's end
-    if (g == 0) sweeping = true;
-    if (g + 1 == rows.size()) sweeping = false;
+    // the sweep runs from the first row point it reaches to the last one, so a skipped row just leaves a gap
+    sweeping = g + 1 < rows.size();
   }
   r.done = !r.crashed && !r.stuck;
   r.replans = replan_count();

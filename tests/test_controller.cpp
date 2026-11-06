@@ -205,13 +205,13 @@ TEST_CASE("feed forward: chasing a point that speeds up at 3 m/s^2 to 5 m/s, it 
   CHECK(worst < 0.3);
 }
 
-// starts hovering but tipped by `angle` about x, flies 10 s, reports the worst height lost and the end state
-static QuadState recover_from(double angle, double& lowest) {
+// starts hovering but tipped by `angle` about `axis` (roll by default), flies 10 s, reports the lowest it got and the end state
+static QuadState recover_from(double angle, double& lowest, Vec3 axis = {1, 0, 0}) {
   Controller c;
   Setpoint sp;
   sp.pos = {0, 0, 10};
   QuadState s = hovering();
-  s.q = axis_angle({1, 0, 0}, angle);
+  s.q = axis_angle(axis, angle);
   lowest = s.p.z;
   for (int i = 0; i < 10000; i++) {
     s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
@@ -316,4 +316,32 @@ TEST_CASE("a 1 m step in x while turning 143 degrees flies along world x and kee
   CHECK(most_x < 1.1);
   CHECK(norm(s.p - sp.pos) < 0.01);
   CHECK(std::abs(yaw_of(s.q) - 2.5) < 0.01);
+}
+
+TEST_CASE("flipped upside down about pitch, it rights itself without falling the whole 10 m") {
+  // upside down by pitch the heading reads as turned round, and before the heading cap that heading error bent the
+  // righting so much it fell 10.6 m from a 10 m start. now it bottoms out about 2 m up
+  double lowest;
+  QuadState s = recover_from(3.1416, lowest, {0, 1, 0});
+  INFO("lowest ", lowest);
+  CHECK(lowest > 1);
+  CHECK(tilt(s.q) < 0.01);
+  CHECK(norm(s.p - Vec3{0, 0, 10}) < 0.1);
+}
+
+TEST_CASE("the heading cap doesn't slow a turn on the spot: 2.5 rad gets within 0.05 rad in under 3.4 s") {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {0, 0, 10};
+  sp.yaw = 2.5;
+  QuadState s = hovering();
+  // 3.32 s with or without the cap, yaw speed tops out at 0.8 rad/s either way
+  double t = -1;
+  for (int i = 1; i <= 6000 && t < 0; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    if (std::abs(std::remainder(yaw_of(s.q) - 2.5, 2 * 3.14159265358979)) < 0.05) t = i * 0.001;
+  }
+  INFO("t ", t);
+  CHECK(t > 0);
+  CHECK(t < 3.4);
 }
