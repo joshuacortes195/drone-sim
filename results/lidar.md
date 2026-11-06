@@ -9,7 +9,7 @@ Measured 2026-10-18 on my PC with `tools/lidar_report.cpp` and the lidar tests, 
 - trips: the same 200 seeded cities, starts and goals as `results/planning.md` (seeds 0 to 199). The drone plans on the city it knows, then a 2 m cube it doesn't know about is dropped floating on the middle of the path's longest leg. Every trip's longest leg was over 6 m, so the cube never covers either end
 - each trip is flown twice with the same sensor noise (seed = map seed + 5000): once blind, once with the lidar
 - flying: on the RTK estimate (ZED-F9P GPS, BMI088 IMU, IST8310 magnetometer, same as `results/estimation.md`), 1 s gyro calibration on the pad, 5 m/s cruise, 3 m/s² ramps, 1 ms physics
-- lidar: Velodyne VLP-16, one full turn every 100 steps (10 Hz), 50 steps after each GPS fix. A turn is taken all at once from the true pose, and the hits are placed with the estimated pose. New hits go into the grid and the box list. If the boxes from this turn cut the path being flown, it plans again from the estimate (A* plus smoothing) and starts the new path from rest
+- lidar: Velodyne VLP-16, one full turn every 100 steps (10 Hz), 50 steps after each GPS fix. A turn is taken all at once from the true pose, and the hits are placed with the estimated pose. New hits go into the grid and the box list. If the boxes from this turn cut the path being flown, it plans again (A* plus smoothing). Since braking replans (2026-11-06, commits 6f65b20 and d1c7dcb) the new path starts where the drone would stop braking straight ahead at 5 m/s² from its estimated velocity, and the setpoint brakes into it. If that braking line comes within the planner's margin of something known, ends below the margin or outside the grid, or there's no path from the stopping point, it plans from the estimate and starts the new path from rest like before
 - closest distances are from the drone's true center to the outside of the boxes. The drone's reach is 0.356 m
 - timings are wall clock around `scan()` + `add_hits()` and around `replan()` (the check that the new boxes cut the path, then `astar()` + `smooth()`), only counted when it did replan. `replan()` is the same function the browser runs
 - run it: build, then `build/lidar_report.exe` (about 30 s)
@@ -34,28 +34,31 @@ Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "
 
 Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): the closest and off the goal numbers moved a little, seed 163 got closer (0.031 m, center still never inside), and the one replan that found no path is gone. The first replan distances and replans per flight came out the same. Brackets now hold the values from before the heading cap. The timing rows are still the PC's: the heading cap doesn't touch the lidar code or planning, and a browser was rendering the sim on the Mac during the whole rerun, so its times aren't clean. That run counted 33,852 lidar turns and 586 replans.
 
+Rerun again on the same Mac after braking replans (2026-11-06, commits 6f65b20 and d1c7dcb, the second one the review fixes). A replan at speed used to start the new path from rest, so the setpoint stopped dead and the drone overshot it. Now it plans from where braking straight ahead at 5 m/s² would stop the drone and brakes into the new path from its current velocity, and it falls back to the old way when that braking line would come within the planner's margin of something known. The headline is the closest any flight got: 0.031 to 0.284 m (seed 163). Not everything got better: the median closest to the cube went from 1.477 to 1.441 m, the median off the goal from 0.066 to 0.073 m, one flight replanned 13 times (the most was 8 before), and one replan found no path again (seed 123), though all 200 still ended within 1 m of the goal. Brackets now hold the values from after the heading cap, before braking replans. The timing rows are still the PC's. This run counted 34,288 lidar turns and 590 replans. A first braking run before the review fixes (a looser check on the braking line) came out almost the same: closest 0.277 m, at most 10 replans, the same failed replan on seed 123.
+
 | | blind | with lidar |
 |---|---|---|
 | flights with the center inside something | 200 (all inside the cube) | 0 |
 | flights within the drone's reach of something | 200 | 1 |
-| closest to anything, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.109 / 1.610 / 1.876 m, worst flight 0.031 m (1.122 / 1.622 / 1.876, worst 0.002) |
+| closest to the cube, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.441 / 1.769 / 8.003 m (1.477 / 1.825 / 7.990) |
+| closest to anything, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.106 / 1.580 / 1.793 m, worst flight 0.284 m (1.109 / 1.610 / 1.876, worst 0.031) |
 | ended within 1 m of the goal | | 200 |
-| off the goal at the end, median / p95 / max | | 0.066 / 0.099 / 0.196 m (0.067 / 0.105 / 0.251) |
+| off the goal at the end, median / p95 / max | | 0.073 / 0.110 / 0.133 m (0.066 / 0.099 / 0.196) |
 
 With the lidar on:
 
 | | median | p95 | max | n |
 |---|---|---|---|---|
 | distance to the cube at the first replan (m) | 15.0 | 27.1 | 37.7 | 200 |
-| replans per flight | 3 | 6 | 8 | 200 |
+| replans per flight | 3 | 6 | 13 (8) | 200 |
 | `scan()` + `add_hits()` per turn (ms) | 0.707 | 1.071 | 1.744 | 33,772 |
 | `replan()`, cut check + `astar()` + `smooth()` (ms) | 9.9 | 41.4 | 142.8 | 578 |
 
 These are from the 2026-10-19 rerun after a replan started from exactly where the drone thinks it is instead of the center of its cell (see the last row of the table below). Timings move between runs of the same build too: the run just before this one, same code, had a worst `scan()` + `add_hits()` of 3.238 ms and a worst replan of 157.9 ms. With a browser running alongside, a worst replan of 411 ms natively and 164 ms in wasm was seen during the review, so the worst case depends a lot on what else the machine is doing.
 
-Every flight replanned at least once. Since the heading cap no replan has failed. Before it, one replan found no path, on seed 47 (seed 127 after the mixer change, also at the goal). When that happens the drone holds where it thinks it is. The hold is a single point, so nothing can cut it and it never tries to replan again. Seed 47's failed replan came near the end, about 0.1 m from the goal (traced on the build before this rerun), so it held there and still ended within 1 m of the goal.
+Every flight replanned at least once. After the heading cap no replan failed. Since braking replans one does again, on seed 123, and that flight still ended within 1 m of the goal. The report only names the seed, and I haven't traced where in the flight it happened. Before the heading cap, one replan found no path, on seed 47 (seed 127 after the mixer change, also at the goal). When that happens the drone holds where it thinks it is. The hold is a single point, so nothing can cut it and it never tries to replan again. Seed 47's failed replan came near the end, about 0.1 m from the goal (traced on the build before this rerun), so it held there and still ended within 1 m of the goal.
 
-The one close call is seed 163: 0.031 m, center never inside (0.071 m before the mixer change, 0.002 m after it and before the heading cap. Every time its 0.356 m reach went into the cube and its center didn't, so it's the one flight counted within reach). Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. On the run before this one its first replan came 0.68 m from the cube at 1.79 m/s and it got within 0.112 m. That's a limit of this sensor on steep legs, not a bug, and it's still open.
+The one close call is seed 163: 0.284 m since braking replans, center never inside (0.071 m before the mixer change, 0.002 m after it and before the heading cap, 0.031 m after the heading cap. Every time its 0.356 m reach went into the cube and its center didn't, so it's the one flight counted within reach). Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. On the run before the cell center fix (the table below) its first replan came 0.68 m from the cube at 1.79 m/s and it got within 0.112 m. Braking replans got it to 0.284 m, still inside its reach. I haven't traced that flight on the new build, so I can't say yet what part of the braking made the difference. That's a limit of this sensor on steep legs, not a bug, and it's still open.
 
 ## What changed while measuring
 
@@ -77,6 +80,6 @@ Each row is one full run of the 200 trips with the lidar on.
 - the whole turn is taken in one instant. A real VLP-16 sweeps over 0.1 s while the drone moves up to 0.5 m
 - the lidar only adds obstacles, it never clears them. Nothing here moves, so that's fine for now
 - the planner treats space it hasn't seen as free. Going around a box's front corner, the new path can cut behind it, and the side only shows up once the drone gets past the front. That's why most flights replan 2 to 6 times
-- each replan starts the new path from rest, so the drone brakes hard even when the new path heads the same way
+- a replan at speed still brakes to a stop before taking the new path, even when the new path heads the same way. Since braking replans it does that along a straight braking leg at 5 m/s² instead of the setpoint stopping dead, but when that leg would come within the planner's margin of something known it falls back to starting from rest
 - the worst replan (143 ms here, more when the machine is busy) runs inside one physics step natively. In the page it would hold up a frame
 - a drone holding after a failed replan never tries again on its own
