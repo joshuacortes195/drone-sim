@@ -8,9 +8,13 @@ Try it live: https://joshuacortes195.github.io/drone-sim/
 
 ![The map view during the lawnmower search: the drone working down a street, lidar hits on the building edges](docs/images/map.jpg)
 
+![The drone flying the waypoint route between the buildings, its lidar hits dotting the walls](docs/images/route.gif)
+
+![Go home: the drone flies over the pad, comes straight down and lands, and the panel says landed on the home pad](docs/images/landing.gif)
+
 The physics, control, planning and estimation are written in C++ and tested natively. The same code is compiled to WebAssembly for the browser, where three.js draws the scene.
 
-Status: phases 0 to 6 are done, and most of phase 7: the batch evaluation, the UI pass and the deploy. Still to do are gifs for this page and a rerun of the evaluation on my PC (the numbers below are from my Intel Mac).
+Status: phases 0 to 6 are done, and most of phase 7: the batch evaluation, the UI pass and the deploy. Still to do is a rerun of the evaluation on my PC (the numbers below are from my Intel Mac).
 
 ## Numbers
 
