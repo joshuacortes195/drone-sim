@@ -2,6 +2,8 @@
 
 Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`, then rerun 2026-11-05 on the same Mac after the mixer change that fixed the one crash (see "The crash"). The results table is the rerun. The headline run is meant for my PC like phases 4 to 6a, so this table gets rerun there and both kept, labeled.
 
+Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): the results table is now that run and the 2026-11-05 numbers are in the table under it. Still 1000 of 1000 in both winds. Most numbers moved a little, the windy worst cases got a bit worse (tracking 0.469 to 0.530 m, off the goal 0.383 to 0.426 m), and the same number of replans found no path (4 and 7).
+
 ## How
 
 - machine: Intel Mac, Core i5-8259U @ 2.30GHz (4 cores, 8 threads), 8 GB RAM, macOS 15.7.7
@@ -15,7 +17,7 @@ Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`, then rerun 2026
 - success: no crash, inside 120 s, and the real drone within 1 m of the goal at the end. A trip with no plan would count as a failure in both winds (there were none)
 - tracking error: rms of the real drone's distance from the setpoint over every step flown, including the 3 s hold at the goal (about a fifth of a median flight), which is why it comes out below the 0.114 m in `results/control.md` for flying a route. Estimation error: rms of the estimate's distance from the real drone
 - crashed flights are left out of the error and time stats, so a crash doesn't read as a tracking or goal error
-- whole run: 245.6 s for 2000 flights on an idle machine (2026-11-04). The 2026-11-05 rerun shared the machine with a compile and two other runs and took 1482 s, so its times aren't used: the planning times below are from 2026-11-04 (same planner, same trips, same paths), and the replans are only counted. Run with `./build/batch_eval 1000`
+- whole run: 245.6 s for 2000 flights on an idle machine (2026-11-04). The 2026-11-05 rerun shared the machine with a compile and two other runs and took 1482 s, so its times aren't used: the planning times below are from 2026-11-04 (same planner, same trips, same paths), and the replans are only counted. The 2026-11-06 rerun took 283.7 s but shared the machine with a browser rendering the sim, so its times aren't used either. Its path length ratios and straight line distances came out identical, so the plans are the same. Run with `./build/batch_eval 1000`
 
 ## Results
 
@@ -24,12 +26,22 @@ Measured 2026-11-04 on my Intel Mac with `tools/batch_eval.cpp`, then rerun 2026
 | success | 1000 of 1000 (100%) | 1000 of 1000 (100%) |
 | crashed | 0 | 0 |
 | out of time / ended over 1 m away | 0 / 0 | 0 / 0 |
+| tracking error, rms per flight (median, p95, worst) | 0.103, 0.150, 0.657 m | 0.141, 0.184, 0.530 m |
+| estimation error, rms per flight (median, p95, worst) | 0.013, 0.015, 0.020 m | 0.013, 0.015, 0.019 m |
+| off the goal at the end (median, p95, worst) | 0.078, 0.111, 0.226 m | 0.095, 0.180, 0.426 m |
+| flight time (median, p95, worst) | 13.94, 20.11, 30.56 s | 13.90, 20.11, 30.56 s |
+| replans | 21, at most 2 per flight | 17, at most 1 per flight |
+| a replan found no path | 4 | 7 |
+
+Before the heading cap (2026-11-05, same trips). Success, crashes, out of time and the failed replan counts came out the same:
+
+| | calm | 4 m/s breeze + 1.5 m/s gusts |
+|---|---|---|
 | tracking error, rms per flight (median, p95, worst) | 0.104, 0.152, 0.658 m | 0.142, 0.186, 0.469 m |
 | estimation error, rms per flight (median, p95, worst) | 0.013, 0.015, 0.021 m | 0.013, 0.015, 0.021 m |
 | off the goal at the end (median, p95, worst) | 0.078, 0.114, 0.254 m | 0.095, 0.181, 0.383 m |
 | flight time (median, p95, worst) | 13.90, 20.11, 30.56 s | 13.90, 20.11, 30.56 s |
 | replans | 22, at most 2 per flight | 16, at most 1 per flight |
-| a replan found no path | 4 | 7 |
 
 Before the mixer change (2026-11-04, same trips):
 
@@ -48,6 +60,8 @@ Before the mixer change (2026-11-04, same trips):
 The windy column there leaves out the crash (999 flights).
 
 The change made the median and p95 a little better everywhere and the windy worst case better (0.610 to 0.469 m). The calm worst case got worse (0.472 to 0.658 m). That's the same kind of flight as seed 127 in `results/planning.md`: in a hard turn there's no thrust level where all the roll and pitch fits, so the mixer gives up some thrust, the drone sinks a little, and the outer loop spends a moment climbing back with no thrust left for sideways force.
+
+The heading cap barely moved the calm worst case (0.658 to 0.657 m) and made the windy one a bit worse (0.469 to 0.530 m). I haven't traced which flights those are yet.
 
 Planning, the same trips for both winds:
 
@@ -71,7 +85,7 @@ I also tried only moving thrust when that makes everything fit, and keeping it o
 
 ## The replans that found no path
 
-4 calm and 7 windy flights had a replan that couldn't find a way and held where it was (8 and 6 before the mixer change). All 11 were on the final approach or already there: 0.06 to 0.25 m from the goal and at most 0.47 s before the setpoint reached the end, so every one still ended within 1 m and counts as a success (the tool prints each one). Those goals sit next to a building, and a lidar hit late in the flight blocks the goal's cell, so there's nowhere left to plan to. In the page, a goal tapped right next to a wall used to turn into "the lidar found the way blocked" once the lidar looked at that wall. Since 2026-11-05 the page counts a failed replan within 1 m of the goal as arrived, the same 1 m rule as here.
+4 calm (seeds 96, 432, 656, 842) and 7 windy (seeds 107, 359, 397, 432, 462, 527, 645) flights had a replan that couldn't find a way and held where it was (the same counts before the heading cap, 8 and 6 before the mixer change). All 11 were on the final approach or already there: 0.04 to 0.34 m from the goal (0.06 to 0.25 m before the heading cap) and at most 0.56 s (0.47 s) before the setpoint reached the end, so every one still ended within 1 m and counts as a success (the tool prints each one). Those goals sit next to a building, and a lidar hit late in the flight blocks the goal's cell, so there's nowhere left to plan to. In the page, a goal tapped right next to a wall used to turn into "the lidar found the way blocked" once the lidar looked at that wall. Since 2026-11-05 the page counts a failed replan within 1 m of the goal as arrived, the same 1 m rule as here.
 
 ## Fixes after a review pass
 

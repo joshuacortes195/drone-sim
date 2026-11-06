@@ -65,6 +65,12 @@ if(NOT EMSCRIPTEN)
   add_executable(batch_eval tools/batch_eval.cpp)
   target_compile_options(batch_eval PRIVATE ${WARN_FLAGS})
   target_link_libraries(batch_eval PRIVATE core)
+
+  # flies the page's lawnmower search through its own bindings and measures how much ground it covered, for results/search.md
+  add_executable(search_report tools/search_report.cpp wasm/bindings.cpp)
+  target_include_directories(search_report SYSTEM PRIVATE tests/stub)
+  target_compile_options(search_report PRIVATE ${WARN_FLAGS})
+  target_link_libraries(search_report PRIVATE core)
 endif()
 
 # browser build: the core plus the bindings, written straight into the web app as an es module and a .wasm file

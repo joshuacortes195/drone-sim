@@ -2,6 +2,8 @@
 
 Measured 2026-10-15 with `tools/fly_route.cpp` unless a section says otherwise. Everything except the two modified-copy windup numbers is printed by that tool. Rerun 2026-11-05 on the same Mac after the mixer change (see "Mixer change" at the end): the step, route and recovery tables show the new numbers, the feed forward and tuning sections are from before it.
 
+Rerun 2026-11-06 on my Intel Mac after the heading cap (`results/search.md`, "The crash this found", and "Heading cap" at the end): every number `fly_route` prints came out the same to the digits shown here, so nothing in the tables moved. The `control()` time from that run isn't used, a browser was rendering the sim on the same machine the whole time, so the cost numbers are kept from before.
+
 ## How
 
 - machine: Intel Core i5-8259U @ 2.30GHz, 8 GB RAM, macOS 15.7.7
@@ -113,3 +115,7 @@ The mixer used to keep total thrust exact and shrink roll and pitch to whatever 
 | one `control()` call | 717 ns | 718 ns |
 
 The y, z and yaw steps didn't change. The `control()` times were taken with the batch eval running on the other cores, so they're only good for the comparison: the extra solve in the mixer doesn't show. The 268 to 300 ns above is from an idle machine before the change.
+
+## Heading cap (2026-11-06)
+
+The attitude loop reads roll and pitch off the whole attitude error, so with a big heading error still to go (135 degrees on seed 31's home leg in `results/search.md`) the roll and pitch it worked out were turned by about half of it, and a drone turning and speeding up at once leaned partly the wrong way. Now `outer_loop()` in `core/controller.cpp` only lets the heading it asks for lead the nose by 0.32 rad, which is 1.2 times the 0.27 rad where yaw speed already tops out (max yaw rate 0.8 rad/s over yaw attitude gain 3), so turns are just as fast. The new test "a 1 m step in x while turning 143 degrees flies along world x and keeps its height" in `tests/test_controller.cpp` slid 0.19 m sideways and sank 0.43 m before the fix, and 0.015 m and 0.008 m after. Rerun with `fly_route` on the same Mac, the step, route, tipped start and 10 m step numbers all came out the same, including the 1 rad yaw step (2.2% overshoot, 2.00 s settle) and the upside down start (8.438 m lost, back under 5° at 0.84 s, 0.498 m off at 6 s).

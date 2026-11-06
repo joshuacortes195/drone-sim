@@ -32,13 +32,15 @@ Only boxes reflect. The ground and ceiling are known and never scanned.
 
 Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"). The flight rows are pure simulation: before the change the Mac printed exactly the PC's numbers. The timing rows in the second table are still the PC's from 2026-10-19. Old values are in brackets where they moved.
 
+Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): the closest and off the goal numbers moved a little, seed 163 got closer (0.031 m, center still never inside), and the one replan that found no path is gone. The first replan distances and replans per flight came out the same. Brackets now hold the values from before the heading cap. The timing rows are still the PC's: the heading cap doesn't touch the lidar code or planning, and a browser was rendering the sim on the Mac during the whole rerun, so its times aren't clean. That run counted 33,852 lidar turns and 586 replans.
+
 | | blind | with lidar |
 |---|---|---|
 | flights with the center inside something | 200 (all inside the cube) | 0 |
 | flights within the drone's reach of something | 200 | 1 |
-| closest to anything, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.122 / 1.622 / 1.876 m, worst flight 0.002 m (1.132 / 1.669 / 1.826, worst 0.071) |
+| closest to anything, median / p95 / max of each flight's closest | 0 / 0 / 0 m | 1.109 / 1.610 / 1.876 m, worst flight 0.031 m (1.122 / 1.622 / 1.876, worst 0.002) |
 | ended within 1 m of the goal | | 200 |
-| off the goal at the end, median / p95 / max | | 0.067 / 0.105 / 0.251 m (0.069 / 0.106 / 0.208) |
+| off the goal at the end, median / p95 / max | | 0.066 / 0.099 / 0.196 m (0.067 / 0.105 / 0.251) |
 
 With the lidar on:
 
@@ -51,9 +53,9 @@ With the lidar on:
 
 These are from the 2026-10-19 rerun after a replan started from exactly where the drone thinks it is instead of the center of its cell (see the last row of the table below). Timings move between runs of the same build too: the run just before this one, same code, had a worst `scan()` + `add_hits()` of 3.238 ms and a worst replan of 157.9 ms. With a browser running alongside, a worst replan of 411 ms natively and 164 ms in wasm was seen during the review, so the worst case depends a lot on what else the machine is doing.
 
-Every flight replanned at least once. One replan found no path, on seed 47 (seed 127 since the mixer change, also at the goal). When that happens the drone holds where it thinks it is. The hold is a single point, so nothing can cut it and it never tries to replan again. Seed 47's failed replan came near the end, about 0.1 m from the goal (traced on the build before this rerun), so it held there and still ended within 1 m of the goal.
+Every flight replanned at least once. Since the heading cap no replan has failed. Before it, one replan found no path, on seed 47 (seed 127 after the mixer change, also at the goal). When that happens the drone holds where it thinks it is. The hold is a single point, so nothing can cut it and it never tries to replan again. Seed 47's failed replan came near the end, about 0.1 m from the goal (traced on the build before this rerun), so it held there and still ended within 1 m of the goal.
 
-The one close call is seed 163: 0.071 m from the cube, center never inside (0.002 m since the mixer change. Both times its 0.356 m reach went into the cube and its center didn't, so it's the one flight counted within reach). Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. On the run before this one its first replan came 0.68 m from the cube at 1.79 m/s and it got within 0.112 m. That's a limit of this sensor on steep legs, not a bug, and it's still open.
+The one close call is seed 163: 0.031 m, center never inside (0.071 m before the mixer change, 0.002 m after it and before the heading cap. Every time its 0.356 m reach went into the cube and its center didn't, so it's the one flight counted within reach). Its longest leg dives 56.7° from level, from 18.25 m down to 1.25 m. The VLP-16 only looks 15° up and down, so a cube on a steep dive stays under every beam until the drone is almost on it. On the run before this one its first replan came 0.68 m from the cube at 1.79 m/s and it got within 0.112 m. That's a limit of this sensor on steep legs, not a bug, and it's still open.
 
 ## What changed while measuring
 

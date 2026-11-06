@@ -32,20 +32,22 @@ Per sample noise is density × √(1000 Hz). GPS noise is fresh on every fix. Re
 
 Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"). The flight numbers are deterministic and matched the PC exactly before the change. The old row values are in brackets where they moved.
 
+Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): the flight numbers moved a little, mostly the worst cases (worst to setpoint on the truth 0.403 m, was 0.914 m), and the estimate and raw GPS rows came out the same. Brackets now hold the value from before the heading cap where it moved. Cells that came out the same keep their bracket from before the mixer change, labeled that way.
+
 | | on the true state | on the estimate, NEO-M8N | on the estimate, ZED-F9P RTK |
 |---|---|---|---|
-| flights within the drone's 0.356 m reach of a building or the ground | 0 | 53 (51) | 0 |
+| flights within the drone's 0.356 m reach of a building or the ground | 0 | 52 (53) | 0 |
 | flights whose center went inside a building or the ground | 0 | 1 | 0 |
-| closest any flight got | 0.673 m (0.680) | -1.210 m (-1.207) | 0.674 m (0.679) |
-| worst to setpoint, median / p95 / worst | 0.255 / 0.384 / 0.914 m (0.283 / 0.401 / 0.430) | 2.444 / 4.094 / 5.799 m (2.319 / 3.935 / 5.594) | 0.257 / 0.399 / 0.893 m (0.283 / 0.416 / 0.466) |
-| off the goal 3 s after the path ends, median / p95 / worst | 0.082 / 0.096 / 0.221 m (0.086 / 0.100 / 0.112) | 1.056 / 2.125 / 3.164 m (1.047 / 2.107 / 3.136) | 0.080 / 0.115 / 0.215 m (0.083 / 0.118 / 0.138) |
-| estimate RMS error, median / p95 / worst | | 1.073 / 1.606 / 2.152 m (1.076 / 1.607 / 2.152) | 0.011 / 0.013 / 0.015 m |
-| estimate worst error, median / p95 / worst | | 2.266 / 3.372 / 4.371 m (2.267 / 3.372 / 4.371) | 0.036 / 0.047 / 0.064 m (0.036 / 0.047 / 0.063) |
+| closest any flight got | 0.670 m (0.673) | -1.209 m (-1.210) | 0.670 m (0.674) |
+| worst to setpoint, median / p95 / worst | 0.245 / 0.380 / 0.403 m (0.255 / 0.384 / 0.914) | 2.444 / 4.094 / 5.799 m (2.319 / 3.935 / 5.594 before the mixer change) | 0.252 / 0.386 / 0.437 m (0.257 / 0.399 / 0.893) |
+| off the goal 3 s after the path ends, median / p95 / worst | 0.082 / 0.096 / 0.099 m (0.082 / 0.096 / 0.221) | 1.047 / 2.125 / 3.164 m (1.056 / 2.125 / 3.164) | 0.080 / 0.113 / 0.133 m (0.080 / 0.115 / 0.215) |
+| estimate RMS error, median / p95 / worst | | 1.073 / 1.606 / 2.152 m (1.076 / 1.607 / 2.152 before the mixer change) | 0.011 / 0.013 / 0.015 m |
+| estimate worst error, median / p95 / worst | | 2.266 / 3.372 / 4.371 m (2.267 / 3.372 / 4.371 before the mixer change) | 0.036 / 0.047 / 0.064 m (0.036 / 0.047 / 0.063 before the mixer change) |
 | raw GPS RMS error (3D), median / p95 / worst | | 5.146 / 5.533 / 5.835 m | 0.021 / 0.022 / 0.023 m |
 
 The Kalman filter cuts the position error about 5x with the NEO-M8N (1.07 m vs 5.15 m RMS at the median) and about 2x with RTK (0.011 m vs 0.021 m). The planner keeps paths 0.789 m from buildings, a margin set assuming the drone knows exactly where it is, and the streets are 4 m wide. With the NEO-M8N the drone is often 1 to 2 m wrong about its own position, so a quarter of the flights clip a building. With RTK the flights are as safe as flying on the truth. So I'm using RTK from here on (`rtk()`), and the NEO-M8N stays as the comparison. In the code `Noise{}` is still the NEO-M8N setup, and the page will use RTK when it starts flying on the estimate in phase 5b.
 
-A* times move between runs of this tool (18.0 and 16.0 ms medians on two runs this session, 15.5 ms in `results/planning.md`). I haven't looked into the spread, so the planning times stay as recorded there.
+A* times move between runs of this tool (18.0 and 16.0 ms medians on two runs this session, 15.5 ms in `results/planning.md`). I haven't looked into the spread, so the planning times stay as recorded there. The 2026-11-06 rerun's times aren't used either: a browser was rendering the sim on the same machine the whole time.
 
 ## Tuning the estimator
 

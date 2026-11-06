@@ -101,9 +101,17 @@ static void outer_loop(Controller& c, const QuadParams& P, const QuadState& s, c
   double side_max = std::min(f.z * std::tan(g.max_tilt), std::sqrt(top * top - f.z * f.z));
   if (side > side_max) f = {f.x * side_max / side, f.y * side_max / side, f.z};
   c.force_sp = f;
+  // the heading it's asked for runs at most a little past where yaw speed tops out (0.8 / 3 = 0.27 rad) ahead of
+  // the nose, so big turns go just as fast. the attitude loop reads roll and pitch off the whole error, and with
+  // a big heading error that turns them by about half of it: a drone turning and speeding up at once leaned the
+  // wrong way and clipped a roof on the search's way home (seed 31)
+  double nose = heading(s.q);
+  double lead = std::remainder(sp.yaw - nose, 2 * 3.14159265358979323846);
+  double cap = 1.2 * g.max_rate.z / g.att.z;
+  double yaw = nose + std::clamp(lead, -cap, cap);
   // attitude: tip body z onto the force (shortest arc from world z), after turning to the heading
   Vec3 z = f * (1 / norm(f));
-  c.att_sp = normalized(Quat{1 + z.z, -z.y, z.x, 0}) * axis_angle({0, 0, 1}, sp.yaw);
+  c.att_sp = normalized(Quat{1 + z.z, -z.y, z.x, 0}) * axis_angle({0, 0, 1}, yaw);
 }
 
 Rotors control(Controller& c, const QuadParams& P, const QuadState& s, const Setpoint& sp, double dt) {

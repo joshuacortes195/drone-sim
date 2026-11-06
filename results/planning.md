@@ -55,7 +55,16 @@ The same 200 queries, planned by the wasm build in Chrome (`fly_to()`, which is 
 
 Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"). The flights are pure simulation with no timing in them, and before the change the Mac printed exactly the numbers the PC had, so the two machines agree here. The planning times above are still the PC's, the mixer doesn't touch planning. The numbers from before the change are in the second table.
 
+Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): the worst cases came back in (worst distance to the setpoint 0.403 m, was 0.914 m, and worst off the goal 0.099 m, was 0.221 m) and the medians and p95s moved in the third digit or not at all. The planning part printed the same lengths, length ratios and waypoint counts as above. Its times aren't used: a browser was rendering the sim on the Mac during the whole rerun, and the heading cap doesn't touch planning anyway. The first table is now this run, the second is from before the heading cap and the third from before the mixer change.
+
 | native, 200 flights | median | 95th percentile | worst |
+|---|---|---|---|
+| RMS distance to the setpoint | 0.097 m | 0.140 m | 0.168 m |
+| worst distance to the setpoint | 0.245 m | 0.380 m | 0.403 m |
+| closest the drone's center got to a building or the ground | 1.148 m | 4.652 m | 9.614 m |
+| distance from the goal 3 s after the path ends | 0.082 m | 0.096 m | 0.099 m |
+
+| before the heading cap (after the mixer change) | median | 95th percentile | worst |
 |---|---|---|---|
 | RMS distance to the setpoint | 0.097 m | 0.146 m | 0.277 m |
 | worst distance to the setpoint | 0.255 m | 0.384 m | 0.914 m |
@@ -69,13 +78,13 @@ Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "
 | closest the drone's center got to a building or the ground | 1.151 m | 4.661 m | 9.616 m |
 | distance from the goal 3 s after the path ends | 0.086 m | 0.100 m | 0.112 m |
 
-The closest any flight got was 0.673 m from the drone's center to a building or the ground (0.680 m before the change). The drone reaches 0.356 m from its center, so the tightest pass still left 0.32 m of air. 0 flights touched anything.
+The closest any flight got was 0.670 m from the drone's center to a building or the ground (0.673 m before the heading cap, 0.680 m before the mixer change). The drone reaches 0.356 m from its center, so the tightest pass still left 0.31 m of air. 0 flights touched anything.
 
-The mixer change made the typical flight a bit tighter and the worst one looser. The worst is seed 127 (and seed 55 close behind): in a hard turn the attitude loop asked for more torque than any thrust level allows, so the mixer dropped thrust to about 12 N, under the 14.9 N it takes to hover, for about 0.3 s while it turned. It sank 0.2 m. The outer loop then puts height first: with the full 90% of thrust going to climbing back, there's no thrust left for sideways force, so it flew level for about 0.4 s and drifted 0.9 m off the setpoint. It still never got near a building. Keeping thrust in that case (the old behavior) keeps this flight at 0.43 m, but then braking hard in wind can tip the drone past 50°, which is what crashed seed 962 in the batch eval.
+The mixer change made the typical flight a bit tighter and the worst one looser. After it, the worst was seed 127 (and seed 55 close behind): in a hard turn the attitude loop asked for more torque than any thrust level allows, so the mixer dropped thrust to about 12 N, under the 14.9 N it takes to hover, for about 0.3 s while it turned. It sank 0.2 m. The outer loop then puts height first: with the full 90% of thrust going to climbing back, there's no thrust left for sideways force, so it flew level for about 0.4 s and drifted 0.9 m off the setpoint. It still never got near a building. Keeping thrust in that case (the old behavior) keeps this flight at 0.43 m, but then braking hard in wind can tip the drone past 50°, which is what crashed seed 962 in the batch eval. The heading cap brought the worst flight back to 0.403 m, under the 0.430 m from before the mixer change, so nothing drifts like that anymore. I haven't traced seed 127 again to see what part of its turn the cap changed.
 
 Each flight starts hovering, already settled, on the first cell center. In the page the drone starts a plan from wherever it is, which can be up to 0.43 m from that cell center, so the first moments of a real flight aren't covered here.
 
-The column that matters for safety is the smallest one, which is why the 0.673 m is listed on its own. The "worst" column there is the flight that stayed farthest away.
+The column that matters for safety is the smallest one, which is why the 0.670 m is listed on its own. The "worst" column there is the flight that stayed farthest away.
 
 ### Before the climb limit
 

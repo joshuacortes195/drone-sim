@@ -294,3 +294,26 @@ TEST_CASE("hover hold in wind: an 8 m/s breeze gets leaned into and held out, gu
   INFO("worst ", worst);
   CHECK(worst < 0.3);
 }
+
+TEST_CASE("a 1 m step in x while turning 143 degrees flies along world x and keeps its height") {
+  Controller c;
+  Setpoint sp;
+  sp.pos = {1, 0, 10};
+  // the nose has to come round from east to 143 degrees left at the same time as it moves, like starting a new leg
+  sp.yaw = 2.5;
+  QuadState s = hovering();
+  double worst_y = 0, worst_z = 0, most_x = 0, most_tilt = 0;
+  for (int i = 0; i < 8000; i++) {
+    s = step(P, s, control(c, P, s, sp, 0.001), 0.001);
+    worst_y = std::max(worst_y, std::abs(s.p.y));
+    worst_z = std::max(worst_z, std::abs(s.p.z - 10));
+    most_x = std::max(most_x, s.p.x);
+    most_tilt = std::max(most_tilt, tilt(s.q));
+  }
+  INFO("worst y ", worst_y, " worst z ", worst_z, " most x ", most_x, " most tilt ", most_tilt);
+  CHECK(worst_y < 0.05);
+  CHECK(worst_z < 0.05);
+  CHECK(most_x < 1.1);
+  CHECK(norm(s.p - sp.pos) < 0.01);
+  CHECK(std::abs(yaw_of(s.q) - 2.5) < 0.01);
+}

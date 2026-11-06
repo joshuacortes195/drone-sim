@@ -23,19 +23,21 @@ Over 1000 seeded cities with a random trip in each, flying the whole stack (plan
 | | calm | windy |
 |---|---|---|
 | success (within 1 m of the goal, no crash, inside 120 s) | 1000 / 1000 | 1000 / 1000 |
-| tracking error, rms per flight, median | 0.104 m | 0.142 m |
+| tracking error, rms per flight, median | 0.103 m | 0.141 m |
 | estimation error, rms per flight, median | 0.013 m | 0.013 m |
 | off the goal at the end, median | 0.078 m | 0.095 m |
 | planning time (A* + smoothing), median | 10.4 ms | |
 | path length / straight line, median | 1.009 | |
 
-The first run had one crash in the wind, on a short downwind leg ending next to a building. The controller only asked for 34° of tilt, but the drone tipped to 53°: braking near full thrust, the mixer kept the total thrust exact and could only give the attitude loop about a fifth of the torque it needed. Now roll and pitch come before thrust in the mixer, the tilt peaks at 35.5° on that trip, and all 1000 make it. The rest of the numbers, from the physics up, are in [results/](results/).
+The first run had one crash in the wind, on a short downwind leg ending next to a building. The controller only asked for 34° of tilt, but the drone tipped to 53°: braking near full thrust, the mixer kept the total thrust exact and could only give the attitude loop about a fifth of the torque it needed. Now roll and pitch come before thrust in the mixer, the tilt peaked at 35.5° on that trip (measured before the heading fix below), and all 1000 make it. The rest of the numbers, from the physics up, are in [results/](results/).
+
+The lawnmower search found a second bug. Flown over 100 cities, seed 31 clipped a roof on the way home: the leg starts facing west and heads south east, so the nose has to come round 135° just as the drone starts moving, and with that much heading error the attitude loop's roll and pitch came out turned by about half of it. The drone leaned partly the wrong way, tilted to 44° and sank 0.6 m onto a roof just under the search height. Now the heading the attitude loop is asked for leads the nose by at most 0.32 rad, a bit past where yaw speed tops out anyway, so turns take the same time. All 100 searches finish, and the worst tracking error across the 200 planned flights in [results/planning.md](results/planning.md) dropped from 0.91 m to 0.40 m. Scoring the flown track with a 6 m footprint each side (half the row spacing), the search covers 99.78% of the area at worst and 100% at the median in calm air, and 99.45% at worst in wind ([results/search.md](results/search.md)).
 
 The physics is 6 degrees of freedom with quaternions, a four motor mixer, motor lag and rotor drag, stepped with RK4 at 1 ms. The controller is a cascaded PID (rate, attitude, velocity, position) with an inverse mixer that gives up yaw first when the rotors saturate, then thrust, and only shrinks roll and pitch when no thrust level fits them. It settles 1 m steps in under 1.9 s with under 2% overshoot and follows a ramped 5 m/s route with 0.114 m RMS error ([results/control.md](results/control.md)). In the browser it held 60 fps on my Intel Mac (i5-8259U) with the physics on a fixed 1 ms step ([results/browser.md](results/browser.md)).
 
-For planning, a seed builds a city of buildings, and 26 neighbor A* searches a 0.5 m voxel grid with the buildings grown by the drone's size, then line of sight smoothing cuts the path down. Across 200 random trips the smoothed path is 0.5% longer than a straight line at the median and takes 7.6 ms to plan in the browser. Flying each one, the worst tracking error is 0.91 m (a hard turn where the mixer traded some height for attitude) and the drone's center never gets closer than 0.67 m to a building ([results/planning.md](results/planning.md)).
+For planning, a seed builds a city of buildings, and 26 neighbor A* searches a 0.5 m voxel grid with the buildings grown by the drone's size, then line of sight smoothing cuts the path down. Across 200 random trips the smoothed path is 0.5% longer than a straight line at the median and takes 7.6 ms to plan in the browser. Flying each one, the worst tracking error is 0.40 m and the drone's center never gets closer than 0.67 m to a building ([results/planning.md](results/planning.md)).
 
-The drone works out where it is from simulated sensors with noise from real data sheets, using a Kalman filter for position and a complementary filter for attitude. With an RTK GPS the estimate is 1.1 cm RMS off and the planned flights are as safe as flying on the truth. A regular GPS puts 53 of 200 flights within reach of a building ([results/estimation.md](results/estimation.md)).
+The drone works out where it is from simulated sensors with noise from real data sheets, using a Kalman filter for position and a complementary filter for attitude. With an RTK GPS the estimate is 1.1 cm RMS off and the planned flights are as safe as flying on the truth. A regular GPS puts 52 of 200 flights within reach of a building ([results/estimation.md](results/estimation.md)).
 
 It also has a simulated lidar (the Velodyne VLP-16 beam pattern) and replans when it sees something new. I dropped an unknown cube on each of 200 planned paths: flying blind hit it every time, and with the lidar every flight got around it and reached the goal ([results/lidar.md](results/lidar.md)).
 
@@ -95,6 +97,13 @@ To run the batch evaluation in [results/eval.md](results/eval.md) (a random trip
 
 ```bash
 ./build/batch_eval 1000
+```
+
+To score the lawnmower search in [results/search.md](results/search.md) (the page's search mission over 100 cities, about 2 minutes on my Mac). The last two numbers are the breeze and the gusts in m/s:
+
+```bash
+./build/search_report 100
+./build/search_report 100 4 1.5
 ```
 
 ## Run it in the browser

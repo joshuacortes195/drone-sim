@@ -1,6 +1,6 @@
 # Wind results (phase 6a)
 
-Measured 2026-10-21 on my PC with `tools/wind_report.cpp`. Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"): only the nine everyday GPS rows moved, in the third or fourth digit, and the truth and RTK rows came out the same as the PC's to the last digit. The table of the accelerometer fix further down keeps the numbers from the time.
+Measured 2026-10-21 on my PC with `tools/wind_report.cpp`. Rerun 2026-11-05 on my Intel Mac after the mixer change (`results/control.md`, "Mixer change"): only the nine everyday GPS rows moved, in the third or fourth digit, and the truth and RTK rows came out the same as the PC's to the last digit. The table of the accelerometer fix further down keeps the numbers from the time. Rerun 2026-11-06 on the same Mac after the heading cap (`results/search.md`, "The crash this found"): all 27 rows came out the same as the 2026-11-05 rerun to the last digit.
 
 ## How
 

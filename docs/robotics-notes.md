@@ -171,10 +171,15 @@ q and -q are the same orientation, so q_err can come out describing the long way
 
 Subtracting Euler angles would break at 90 degrees of pitch and jump at ±180 degrees of yaw. The quaternion error has neither problem.
 
+That small angle reading broke on the search mission's way home, where seed 31 of the search coverage run clipped a roof. The leg starts facing west and heads south east, so the nose has to come round 135 degrees just as the drone starts to move. With that much heading still to go, the error is one big rotation mixing tilt and heading, and the roll and pitch it gives are turned by about half the heading error. So the drone leaned partly the wrong way, the position loop fought it, it tilted to 44 degrees and sank 0.6 m onto a roof that sat just under the search height. The estimate was right the whole time, it was purely the control math.
+
+The fix is a cap in `outer_loop()`: the heading the attitude loop is asked for can only lead the nose by 0.32 rad. Yaw speed already tops out at 0.8 rad/s once the heading error passes 0.27 rad (0.8 over the gain of 3), so a bigger lead never made it turn any faster. All it did was bend the tilt. With the cap, turns take the same time and roll and pitch are never read off a big heading error. I also tried the textbook fix first (work out the tilt on its own, then the heading from what's left). It fixed the crash but made the upside down recovery drift a meter sideways, because the split between tilt and heading isn't well defined near 180 degrees. The cap left that test exactly as it was. A test does a 1 m step in x while turning 143 degrees: before the fix it slid 0.19 m sideways and sank 0.43 m, after it 0.015 m and 0.008 m.
+
 Where it lives: the first lines of `control()` in `core/controller.cpp`.
 
 Interview questions:
 - Why use a quaternion error instead of subtracting roll, pitch and yaw?
+- What happens to a quaternion attitude error when the heading error is big, and how would you stop it bending the tilt?
 - What's the double cover problem and how do you handle it?
 - Why is twice the vector part a good attitude error?
 
@@ -465,6 +470,8 @@ Where it lives: `onTap`, `sendTo` and `dropBox` in `web/src/main.ts`, `add_box` 
 A mission is just a list of goals. The drone plans to the first one with A*, flies it, and once it's within 1 m of the end it plans to the next. The waypoint route loops forever. The others stop at the last goal and hold there. If the lidar finds the way blocked and the replan fails, it holds where it is and the panel says it's blocked. The one exception is a failed replan less than 1 m from the goal. That's a goal right next to a wall: once the lidar sees the wall, the goal's own cell is too close to it to plan into. The drone is already there by the same 1 m rule the eval uses, so the page counts it as arrived instead of saying it can't find a way.
 
 The search is a lawnmower pattern, the way you'd search a field: fly a row, step over, fly back the other way. `lawnmower()` in `core/route.cpp` spreads the rows evenly between the two edges with no gap wider than the spacing I ask for. If the spacing doesn't fit evenly it adds a row so the last strip doesn't get skipped. The spacing should match how far the sensor sees on each side. For the city I sweep -29 to 29 m at 6 m up with 12 m spacing. That puts the six rows along the east west streets, so the lidar sweeps the buildings on both sides, and then it comes home.
+
+To see how much it really covers, `tools/search_report.cpp` flies the page's search through the page's own bindings over 100 cities and scores the real track: a 0.25 m cell counts if the drone passed within 6 m of it, half the spacing. The planned rows score 100%. The flown ones score 99.78% at worst and 100% at the median, and in calm air the drone never strays more than 0.78 m from its rows. With rows 11.6 m apart and 6 m each side, each row has only 0.2 m to spare, so a little bulge on two neighbouring rows at the same spot leaves a sliver. That run is also what found the heading bug in "Attitude error from quaternions" above. The numbers are in `results/search.md`.
 
 Dividing the depth by the spacing in floating point can come out a hair over a whole number (2.1 / 0.3 is 7.000000000000001), and rounding that up would add an extra row. A tiny tolerance before rounding stops that, and a test checks it.
 
