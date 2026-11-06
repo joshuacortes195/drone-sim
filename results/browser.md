@@ -95,3 +95,21 @@ Measured 2026-11-04 after the graphics pass (physical sky with image based light
 | physics time per frame | 0.41 to 0.99 ms, median 0.60 | 0.43 to 1.09 ms, median 0.56 |
 
 60 fps is this display's refresh rate, so the frame rate is capped there and I can't tell how much headroom is left. The physics kept real time. Two pages rendering at once on this GPU (the desktop page and a phone sized one) dropped to 10 fps and 280 steps/s, so measure with one tab. A phone sized window (390 x 844 at a pixel ratio of 3, so 2 after the page's cap, and a 2048 shadow map) also read 60 fps in 3 readings, alone, in Chrome's device emulation on this Mac, not on a real phone.
+
+## Checks after the landing work (my Mac)
+
+Done 2026-11-06 on the same Mac and browser as the 6b section (Chrome 155 from agent-browser 0.39.1, headed), the Vite dev server, wasm from `a24cbe7` (emcc 6.0.12, Release), seed 1, rtk gps, no wind, one tab.
+
+- Goal tapped on a wall in the chase view: I flew the drone down a street with a tapped goal, then tapped the facade of the building at the end of it. It planned on the first try, flew there and said "holding at your goal", hovering in front of the wall. This is the 1.5 m step out from a wall, which the scripted checks never covered because they only tap in the map view
+- Frame rate by window, 2 to 4 readings each, chase view, flying the route:
+
+| window | what the page picked | frame rate |
+|---|---|---|
+| 1280 x 800, pixel ratio 1 | desktop: ratio 1, 4096 shadow map | 60 fps in all 4 |
+| 1200 x 610, pixel ratio 2 | phone (short side under 700 px): ratio 2, 2048 shadow map | 37, 43, 39, 41 fps |
+| 390 x 844, pixel ratio 3 (iPhone 14 emulation) | phone: ratio 2, 2048 shadow map | 60 fps in every reading |
+
+The page decides it's on a phone from the window's short side when it loads, so a short laptop window on a retina screen gets the phone's pixel ratio of 2 instead of the desktop cap of 1.5, which is about 1.8 times the pixels. That's the slow row. Physics kept real time in all of them (999 to 1001 steps/s).
+
+- Phone viewport (iPhone 14 emulation, not a real phone): the panel starts folded, go home climbed, flew back and said "landed on the home pad" at 0.1 m, a tapped goal took off from the pad and held, no console errors on a fresh load
+- Bug found and fixed: with the bottom sheet open on a phone, the error plot sat on top of it and hid the gusts slider and the everyday gps toggle, so you couldn't tap them. The open sheet now sits above the plot (`z-index` in `web/index.html`). After the fix the gps toggle switches from a tap and the folded layout is unchanged

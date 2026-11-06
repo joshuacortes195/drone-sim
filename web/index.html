@@ -88,6 +88,8 @@
       @media (max-width: 700px) {
         .bar { right: 8px; }
         .controls { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 55vh; overflow-y: auto; }
+        /* the open controls sit on top of the plot, otherwise the plot covers the gusts slider and the gps toggle */
+        .controls { z-index: 1; }
         /* the plot sits just above the folded controls, so a readout that wraps to three lines can't end up under it */
         .panel { bottom: 104px; right: 8px; width: auto; padding: 6px; }
         .panel canvas { height: 64px; }
